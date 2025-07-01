@@ -13,6 +13,10 @@ struct CalendarGridView: View {
         return formatter
     }()
     
+    // Consistent spacing values
+    private let gridSpacing: CGFloat = 12
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 7)
+    
     var body: some View {
         VStack(spacing: 0) {
             // Header with month/year and navigation
@@ -21,8 +25,9 @@ struct CalendarGridView: View {
             // Days of week
             weekdayHeader
             
-            // Calendar grid
+            // Calendar grid - Allow it to expand with flexible spacing
             calendarGrid
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         .padding()
@@ -55,8 +60,8 @@ struct CalendarGridView: View {
     }
     
     private var weekdayHeader: some View {
-        HStack(spacing: 0) {
-            ForEach(calendar.veryShortWeekdaySymbols, id: \.self) { day in
+        LazyVGrid(columns: columns, spacing: gridSpacing) {
+            ForEach(Array(calendar.veryShortWeekdaySymbols.enumerated()), id: \.offset) { index, day in
                 Text(day)
                     .font(.caption)
                     .fontWeight(.medium)
@@ -69,18 +74,40 @@ struct CalendarGridView: View {
     }
     
     private var calendarGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 12) {
-            ForEach(daysInMonth, id: \.self) { date in
-                DayCell(
-                    date: date,
-                    entry: entryForDate(date),
-                    isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
-                    isToday: calendar.isDateInToday(date)
-                )
+        VStack(spacing: 0) {
+            ForEach(weekRows, id: \.self) { week in
+                HStack(spacing: gridSpacing) {
+                    ForEach(week, id: \.self) { date in
+                        DayCell(
+                            date: date,
+                            entry: entryForDate(date),
+                            isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
+                            isToday: calendar.isDateInToday(date)
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                if week != weekRows.last {
+                    Spacer(minLength: gridSpacing)
+                }
             }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
+    }
+    
+    private var weekRows: [[Date]] {
+        let days = daysInMonth
+        var weeks: [[Date]] = []
+        
+        for i in stride(from: 0, to: days.count, by: 7) {
+            let endIndex = min(i + 7, days.count)
+            weeks.append(Array(days[i..<endIndex]))
+        }
+        
+        return weeks
     }
     
     private var daysInMonth: [Date] {
@@ -138,8 +165,11 @@ struct DayCell: View {
             } else {
                 emptyDayIndicator
             }
+            
+            Spacer(minLength: 0)
         }
-        .frame(width: 50, height: 70)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 80) // Minimum height for better spacing
         .background(dayBackgroundColor, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)

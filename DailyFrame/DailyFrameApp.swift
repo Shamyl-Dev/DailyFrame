@@ -30,5 +30,6 @@ struct DailyFrameApp: App {
         .modelContainer(sharedModelContainer)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        .defaultSize(width: 1000, height: 700)
     }
 }

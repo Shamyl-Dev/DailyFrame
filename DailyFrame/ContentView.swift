@@ -18,19 +18,18 @@ struct ContentView: View {
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                     .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 10) {
-                        // App title - more compact spacing
-                        headerView
-                        
-                        // Main calendar view
-                        CalendarGridView()
-                    }
-                    .padding(.top, 1)
+                VStack(spacing: 10) {
+                    // App title - more compact spacing
+                    headerView
+                    
+                    // Main calendar view - Allow it to expand
+                    CalendarGridView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .padding(.top, 1)
             }
         }
-        .frame(minWidth: 800, minHeight: 600)
+        .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
     }
     
     private var headerView: some View {
