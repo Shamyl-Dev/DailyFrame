@@ -234,6 +234,26 @@ struct RecordingView: View {
             .animation(.easeInOut(duration: 0.2), value: videoRecorder.isRecording)
             .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
             
+            // Show Videos Button
+            if !videoRecorder.isRecording {
+                Button(action: {
+                    videoRecorder.showVideosInFinder()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 12))
+                        Text("Show Videos")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity)
+            }
+            
             Text(videoRecorder.isRecording ? "Recording in progress" : (videoRecorder.hasPermission ? "Ready to record" : "Grant permissions to continue"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)

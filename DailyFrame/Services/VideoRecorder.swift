@@ -352,11 +352,18 @@ class VideoRecorder: NSObject, ObservableObject {
         
         print("📹 Starting recording with \(activeConnections.count) active connections")
         
-        // Create output URL
+        // 🎬 FIXED: Use Documents directory (always accessible)
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame/Videos", isDirectory: true)
+        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
         
-        try? FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+            print("📁 Created directory: \(videosDirectory.path)")
+        } catch {
+            errorMessage = "Failed to create video directory: \(error.localizedDescription)"
+            print("❌ Failed to create directory: \(error)")
+            return nil
+        }
         
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -367,6 +374,8 @@ class VideoRecorder: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: outputURL)
         
         currentOutputURL = outputURL
+        
+        print("📹 Saving video to: \(outputURL.path)")
         
         return await withCheckedContinuation { continuation in
             Task.detached {
@@ -448,6 +457,51 @@ class VideoRecorder: NSObject, ObservableObject {
         
         if devices.isEmpty {
             print("❌ No camera devices found")
+        }
+    }
+    
+    // Add these methods to your VideoRecorder class:
+    
+    func showVideosInFinder() {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        
+        // Create directory if it doesn't exist
+        try? FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+        
+        // Open in Finder
+        NSWorkspace.shared.open(videosDirectory)
+        print("📁 Opening videos folder: \(videosDirectory.path)")
+    }
+    
+    func getVideoURL(for date: Date) -> URL? {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let filename = "\(dateFormatter.string(from: date)).mov"
+        let videoURL = videosDirectory.appendingPathComponent(filename)
+        
+        return FileManager.default.fileExists(atPath: videoURL.path) ? videoURL : nil
+    }
+    
+    func getVideosDirectoryPath() -> String {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        return videosDirectory.path
+    }
+    
+    func getAllVideoFiles() -> [URL] {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: videosDirectory, includingPropertiesForKeys: nil)
+            return files.filter { $0.pathExtension.lowercased() == "mov" }
+        } catch {
+            print("❌ Error reading videos directory: \(error)")
+            return []
         }
     }
 }
