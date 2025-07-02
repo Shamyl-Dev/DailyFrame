@@ -10,23 +10,29 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @State private var showingRecordingView = false
     
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background with subtle blur
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(.all) // Ensure it covers everything
                 
-                VStack(spacing: 10) {
-                    // App title - more compact spacing
+                VStack(spacing: 0) {
+                    // App title - smoother transition
                     headerView
+                        .opacity(showingRecordingView ? 0 : 1)
+                        .scaleEffect(showingRecordingView ? 0.95 : 1.0, anchor: .top)
+                        .offset(y: showingRecordingView ? -20 : 0)
+                        .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
                     
                     // Main calendar view - Allow it to expand
-                    CalendarGridView()
+                    CalendarGridView(showingRecordingView: $showingRecordingView)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.top, showingRecordingView ? -40 : 10)
+                        .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
                 }
-                .padding(.top, 1)
             }
         }
         .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
@@ -44,6 +50,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.top, 8)
+        .padding(.bottom, 10)
     }
 }
 

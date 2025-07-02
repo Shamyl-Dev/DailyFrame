@@ -5,6 +5,8 @@ struct CalendarGridView: View {
     @Query private var entries: [DiaryEntry]
     @State private var selectedDate = Date()
     @State private var currentMonth = Date()
+    @State private var selectedEntryDate: Date?
+    @Binding var showingRecordingView: Bool
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -18,19 +20,41 @@ struct CalendarGridView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 7)
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with month/year and navigation
-            headerView
+        ZStack {
+            // Main calendar view
+            VStack(spacing: 0) {
+                // Header with month/year and navigation
+                headerView
+                
+                // Days of week
+                weekdayHeader
+                
+                // Calendar grid
+                calendarGrid
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .padding()
+            .blur(radius: showingRecordingView ? 8 : 0)
+            .scaleEffect(showingRecordingView ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.4), value: showingRecordingView)
             
-            // Days of week
-            weekdayHeader
-            
-            // Calendar grid - Allow it to expand with flexible spacing
-            calendarGrid
+            // Recording view without dark overlay
+            if showingRecordingView, let selectedDate = selectedEntryDate {
+                RecordingView(
+                    selectedDate: selectedDate,
+                    existingEntry: entryForDate(selectedDate),
+                    isPresented: $showingRecordingView
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.8).combined(with: .opacity),
+                    removal: .scale(scale: 0.8).combined(with: .opacity)
+                ))
+                .zIndex(1)
+            }
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding()
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showingRecordingView)
     }
     
     private var headerView: some View {
@@ -82,7 +106,12 @@ struct CalendarGridView: View {
                             date: date,
                             entry: entryForDate(date),
                             isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
-                            isToday: calendar.isDateInToday(date)
+                            isToday: calendar.isDateInToday(date),
+                            onTap: {
+                                // Handle day cell tap
+                                selectedEntryDate = date
+                                showingRecordingView = true
+                            }
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -143,6 +172,7 @@ struct DayCell: View {
     let entry: DiaryEntry?
     let isCurrentMonth: Bool
     let isToday: Bool
+    let onTap: () -> Void
     
     @State private var isHovered = false
     
@@ -153,32 +183,44 @@ struct DayCell: View {
     }()
     
     var body: some View {
-        VStack(spacing: 8) {
-            // Date number
-            Text(dayFormatter.string(from: date))
-                .font(.system(size: 14, weight: isToday ? .semibold : .medium))
-                .foregroundStyle(dayTextColor)
+        ZStack {
+            // Main card background
+            RoundedRectangle(cornerRadius: 12)
+                .fill(dayBackgroundColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(borderColor, lineWidth: isToday ? 2 : 0)
+                )
             
-            // Entry indicator or thumbnail
-            if let entry = entry {
-                entryPreview(for: entry)
-            } else {
-                emptyDayIndicator
+            VStack {
+                HStack {
+                    Text(dayFormatter.string(from: date))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(dayTextColor)
+                    Spacer()
+                }
+                
+                Spacer()
+                
+                // Just a small dot for entries
+                if entry != nil {
+                    Circle()
+                        .fill(.blue)
+                        .frame(width: 6, height: 6)
+                        .padding(.bottom, 8)
+                }
             }
-            
-            Spacer(minLength: 0)
+            .padding(8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(minHeight: 80) // Minimum height for better spacing
-        .background(dayBackgroundColor, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(borderColor, lineWidth: isToday ? 2 : 0)
-        )
+        .frame(minHeight: 80)
         .scaleEffect(isHovered ? 1.05 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isHovered)
         .onHover { hovering in
             isHovered = hovering
+        }
+        .onTapGesture {
+            onTap()
         }
         .opacity(isCurrentMonth ? 1.0 : 0.3)
     }
@@ -197,7 +239,7 @@ struct DayCell: View {
         if isToday {
             return .accentColor.opacity(0.1)
         } else if isHovered && isCurrentMonth {
-            return .primary.opacity(0.05)
+            return .primary.opacity(0.12)
         } else {
             return .clear
         }
@@ -205,36 +247,6 @@ struct DayCell: View {
     
     private var borderColor: Color {
         isToday ? .accentColor : .clear
-    }
-    
-    @ViewBuilder
-    private func entryPreview(for entry: DiaryEntry) -> some View {
-        if let thumbnailData = entry.thumbnailData,
-           let image = NSImage(data: thumbnailData) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 32, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else {
-            // Video icon for entries without thumbnails
-            Image(systemName: "video.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 24)
-                .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 4))
-        }
-    }
-    
-    private var emptyDayIndicator: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(.quaternary)
-            .frame(width: 32, height: 24)
-            .overlay(
-                Image(systemName: "plus")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            )
     }
 }
 
