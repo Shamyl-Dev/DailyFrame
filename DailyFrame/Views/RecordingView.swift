@@ -1,4 +1,3 @@
-// filepath: /Users/shamylkhan/development/VsCode/Video diary/DailyFrame/DailyFrame/Views/RecordingView.swift
 import SwiftUI
 import SwiftData
 import AVFoundation
@@ -27,14 +26,12 @@ struct RecordingView: View {
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
             
-            VStack(spacing: 32) {
-                // Header with close button
+            VStack(spacing: 12) { // Reduced from 16 to 12
+                // Header with back button - moved much closer to top
                 headerView
                 
-                Spacer()
-                
-                // Date display
-                VStack(spacing: 8) {
+                // Date display - moved closer to header
+                VStack(spacing: 4) { // Reduced from 6 to 4
                     Text(dateFormatter.string(from: selectedDate))
                         .font(.title2)
                         .fontWeight(.medium)
@@ -51,27 +48,42 @@ struct RecordingView: View {
                     }
                 }
                 
-                // Recording area
+                // Recording area - much larger
                 recordingArea
                 
-                Spacer()
-                
-                // Controls
+                // Controls - more subtle
                 controlsView
                 
-                Spacer()
+                Spacer(minLength: 12) // Reduced from 16 to 12
             }
-            .padding(40)
+            .padding(.horizontal, 40)
+            .padding(.top, 8) // Much reduced from 20 to 8
+            .padding(.bottom, 40)
+        }
+        .onKeyDown { keyCode in
+            if keyCode == 53 { // Escape key code
+                isPresented = false
+                return true
+            }
+            return false
         }
     }
     
     private var headerView: some View {
         HStack {
-            Button("Close") {
+            // Back button instead of close
+            Button(action: {
                 isPresented = false
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Back")
+                        .font(.subheadline)
+                }
+                .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
             
             Spacer()
             
@@ -79,18 +91,20 @@ struct RecordingView: View {
                 .font(.headline)
                 .fontWeight(.medium)
         }
+        .padding(.top, 4) // Small padding from very top
     }
     
     private var recordingArea: some View {
         ZStack {
-            // Camera preview area
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.black.opacity(0.1))
+            // Camera preview area - much larger
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.black.opacity(0.05))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(.quaternary, lineWidth: 1)
                 )
-                .frame(width: 400, height: 300)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minHeight: 420) // Increased minimum height since we have more space
             
             if isRecording {
                 // Recording indicator
@@ -117,16 +131,16 @@ struct RecordingView: View {
                     
                     Spacer()
                 }
-                .padding(16)
+                .padding(20)
             } else {
                 // Camera icon when not recording
                 VStack(spacing: 16) {
                     Image(systemName: "video.fill")
-                        .font(.system(size: 40))
+                        .font(.system(size: 48))
                         .foregroundStyle(.quaternary)
                     
                     Text("Camera Preview")
-                        .font(.subheadline)
+                        .font(.title3)
                         .foregroundStyle(.quaternary)
                 }
             }
@@ -134,46 +148,61 @@ struct RecordingView: View {
     }
     
     private var controlsView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             // Recording duration progress
             if isRecording {
                 VStack(spacing: 8) {
                     ProgressView(value: recordingDuration, total: maxRecordingDuration)
                         .progressViewStyle(LinearProgressViewStyle(tint: .red))
-                        .frame(width: 200)
+                        .frame(width: 240)
                     
                     Text("\(Int(maxRecordingDuration - recordingDuration))s remaining")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
             
-            // Record button
+            // Modern minimal record button
             Button(action: toggleRecording) {
-                ZStack {
+                HStack(spacing: 8) {
+                    // Small indicator
                     Circle()
-                        .fill(isRecording ? .red : .blue)
-                        .frame(width: 80, height: 80)
+                        .fill(isRecording ? .red : .white)
+                        .frame(width: 8, height: 8)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(isRecording ? .clear : .secondary, lineWidth: 1)
+                        )
                     
-                    if isRecording {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(.white)
-                            .frame(width: 20, height: 20)
-                    } else {
-                        Circle()
-                            .fill(.white)
-                            .frame(width: 24, height: 24)
-                    }
+                    // Text label
+                    Text(isRecording ? "Stop" : "Record")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(isRecording ? .red : .primary)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .strokeBorder(.quaternary, lineWidth: 1)
+                        )
+                )
             }
             .buttonStyle(.plain)
-            .scaleEffect(isRecording ? 1.1 : 1.0)
+            .scaleEffect(isRecording ? 1.02 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: isRecording)
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
             
-            Text(isRecording ? "Tap to stop recording" : "Tap to start recording")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Text(isRecording ? "Recording in progress" : "Ready to record")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .transition(.opacity)
         }
+        .animation(.easeInOut(duration: 0.3), value: isRecording)
     }
     
     private func toggleRecording() {
@@ -185,7 +214,9 @@ struct RecordingView: View {
     }
     
     private func startRecording() {
-        isRecording = true
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isRecording = true
+        }
         recordingDuration = 0
         
         // Start timer
@@ -203,7 +234,9 @@ struct RecordingView: View {
     }
     
     private func stopRecording() {
-        isRecording = false
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isRecording = false
+        }
         recordingTimer?.invalidate()
         recordingTimer = nil
         
@@ -233,6 +266,52 @@ struct RecordingView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+// Extension to handle key events
+extension View {
+    func onKeyDown(perform action: @escaping (UInt16) -> Bool) -> some View {
+        self.background(KeyEventHandlingView(onKeyDown: action))
+    }
+}
+
+struct KeyEventHandlingView: NSViewRepresentable {
+    let onKeyDown: (UInt16) -> Bool
+    
+    func makeNSView(context: Context) -> NSView {
+        let view = KeyHandlingNSView()
+        view.onKeyDown = onKeyDown
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if let keyView = nsView as? KeyHandlingNSView {
+            keyView.onKeyDown = onKeyDown
+        }
+    }
+}
+
+class KeyHandlingNSView: NSView {
+    var onKeyDown: ((UInt16) -> Bool)?
+    
+    override var acceptsFirstResponder: Bool { true }
+    
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+    
+    override func keyDown(with event: NSEvent) {
+        guard let onKeyDown = onKeyDown else {
+            super.keyDown(with: event)
+            return
+        }
+        
+        // Handle the key event with the keyCode directly
+        if !onKeyDown(event.keyCode) {
+            super.keyDown(with: event)
+        }
     }
 }
 
