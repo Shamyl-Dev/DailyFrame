@@ -11,13 +11,15 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showingRecordingView = false
+    // 🔧 CHANGED: Use singleton instead of @StateObject
+    @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background with subtle blur
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .ignoresSafeArea(.all) // Ensure it covers everything
+                    .ignoresSafeArea(.all)
                 
                 VStack(spacing: 0) {
                     // App title - smoother transition
@@ -28,10 +30,13 @@ struct ContentView: View {
                         .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
                     
                     // Main calendar view - Allow it to expand
-                    CalendarGridView(showingRecordingView: $showingRecordingView)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, showingRecordingView ? -40 : 10)
-                        .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
+                    CalendarGridView(
+                        showingRecordingView: $showingRecordingView,
+                        sharedVideoRecorder: sharedVideoRecorder // ✅ Pass singleton instance
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, showingRecordingView ? -40 : 10)
+                    .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
                 }
             }
         }
@@ -39,18 +44,51 @@ struct ContentView: View {
     }
     
     private var headerView: some View {
-        VStack(spacing: 4) {
-            Text("DailyFrame")
-                .font(.largeTitle)
-                .fontWeight(.thin)
-                .foregroundStyle(.primary)
+        ZStack {
+            // Centered title
+            VStack(spacing: 4) {
+                Text("DailyFrame")
+                    .font(.largeTitle)
+                    .fontWeight(.thin)
+                    .foregroundStyle(.primary)
+                
+                Text("Your daily learning journey")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             
-            Text("Your daily learning journey")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            // Right-aligned button
+            HStack {
+                Spacer()
+                
+                Button(action: {
+                    // ✅ Use singleton instance
+                    sharedVideoRecorder.showVideosInFinder()
+                }) {
+                    HStack(spacing: 4) {
+                        Text("Videos")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(.quaternary.opacity(0.5), lineWidth: 0.5)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Open videos folder")
+            }
         }
         .padding(.top, 8)
         .padding(.bottom, 10)
+        .padding(.horizontal, 20)
     }
 }
 

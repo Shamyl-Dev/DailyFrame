@@ -6,9 +6,9 @@ struct RecordingView: View {
     let selectedDate: Date
     let existingEntry: DiaryEntry?
     @Binding var isPresented: Bool
+    let videoRecorder: VideoRecorder // ✅ Accept shared instance instead of creating new one
     
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var videoRecorder = VideoRecorder()
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -59,10 +59,12 @@ struct RecordingView: View {
             .padding(.bottom, 40)
         }
         .onAppear {
-            videoRecorder.startSession()
+            print("📹 RecordingView appeared - using existing session")
+            // Don't call any setup methods - just use the existing singleton
         }
         .onDisappear {
-            videoRecorder.stopSession()
+            print("📹 RecordingView disappeared - singleton remains alive")
+            // Don't stop anything - singleton persists
         }
         .onKeyDown { keyCode in
             if keyCode == 53 { // Escape key code
@@ -346,7 +348,8 @@ class KeyHandlingNSView: NSView {
     RecordingView(
         selectedDate: Date(),
         existingEntry: nil,
-        isPresented: .constant(true)
+        isPresented: .constant(true),
+        videoRecorder: VideoRecorder.shared // ✅ Use singleton
     )
     .modelContainer(for: DiaryEntry.self, inMemory: true)
 }

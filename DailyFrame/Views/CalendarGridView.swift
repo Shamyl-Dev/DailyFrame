@@ -7,6 +7,7 @@ struct CalendarGridView: View {
     @State private var currentMonth = Date()
     @State private var selectedEntryDate: Date?
     @Binding var showingRecordingView: Bool
+    let sharedVideoRecorder: VideoRecorder // ✅ Accept shared instance
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -44,7 +45,8 @@ struct CalendarGridView: View {
                 RecordingView(
                     selectedDate: selectedDate,
                     existingEntry: entryForDate(selectedDate),
-                    isPresented: $showingRecordingView
+                    isPresented: $showingRecordingView,
+                    videoRecorder: sharedVideoRecorder // ✅ Pass shared instance
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.asymmetric(

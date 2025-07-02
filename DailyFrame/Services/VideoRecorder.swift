@@ -4,6 +4,9 @@ import Combine
 
 @MainActor
 class VideoRecorder: NSObject, ObservableObject {
+    // 🔧 NEW: Singleton pattern to prevent multiple instances
+    static let shared = VideoRecorder()
+    
     @Published var isRecording = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var hasPermission = false
@@ -16,18 +19,71 @@ class VideoRecorder: NSObject, ObservableObject {
     private var movieFileOutput: AVCaptureMovieFileOutput?
     private var recordingTimer: Timer?
     private var currentOutputURL: URL?
+    private var isSessionConfigured = false
     
     private let sessionQueue = DispatchQueue(label: "session queue")
     
-    override init() {
+    // 🔧 NEW: Private initializer to enforce singleton
+    private override init() {
         super.init()
+        print("🎥 VideoRecorder singleton initialized")
         Task {
             await checkPermissions()
         }
     }
     
+    // 🔧 NEW: Clean reset method (improved)
+    func resetSession() {
+        print("🔄 Resetting video recorder session...")
+        
+        // Stop any recording first
+        if isRecording {
+            Task {
+                await stopRecording()
+            }
+        }
+        
+        // Stop timer
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        // Reset state
+        isRecording = false
+        recordingDuration = 0
+        currentOutputURL = nil
+        
+        // Clean up session on background queue
+        if let session = captureSession {
+            Task.detached {
+                if session.isRunning {
+                    print("🛑 Stopping existing session...")
+                    session.stopRunning()
+                    
+                    // Wait for session to fully stop
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                
+                Task { @MainActor in
+                    self.captureSession = nil
+                    self.videoDeviceInput = nil
+                    self.audioDeviceInput = nil
+                    self.movieFileOutput = nil
+                    self.previewLayer = nil
+                    self.isSessionConfigured = false
+                    print("✅ Session reset complete")
+                }
+            }
+        }
+    }
+    
     func checkPermissions() async {
         print("🔍 Checking permissions...")
+        
+        // 🔧 Don't reset if session is already configured and working
+        if isSessionConfigured && captureSession?.isRunning == true {
+            print("📹 Session already configured and running, skipping reset")
+            return
+        }
         
         // Debug available cameras first
         debugCameraDevices()
@@ -83,9 +139,9 @@ class VideoRecorder: NSObject, ObservableObject {
     }
     
     private func setupCaptureSession() async {
-        // Prevent multiple setups
-        if captureSession != nil {
-            print("📹 Capture session already exists, skipping setup")
+        // 🔧 NEW: Prevent multiple setups
+        if isSessionConfigured {
+            print("📹 Session already configured, skipping setup")
             return
         }
         
@@ -260,7 +316,7 @@ class VideoRecorder: NSObject, ObservableObject {
                         try? await Task.sleep(for: .milliseconds(500))
                         
                         print("📹 Session auto-started: \(session.isRunning)")
-                    }
+                      }
                 }
                 
                 continuation.resume()
@@ -268,6 +324,7 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
+    // 🔧 UPDATED: Better session management
     nonisolated func startSession() {
         Task { @MainActor in
             guard let session = self.captureSession else { 
@@ -292,13 +349,17 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
+    // 🔧 UPDATED: Better session cleanup
     nonisolated func stopSession() {
         Task { @MainActor in
             guard let session = self.captureSession else { return }
             
+            print("🛑 Stopping capture session...")
+            
             Task.detached {
                 if session.isRunning {
                     session.stopRunning()
+                    print("🛑 Capture session stopped")
                 }
             }
         }
@@ -430,6 +491,8 @@ class VideoRecorder: NSObject, ObservableObject {
     }
     
     deinit {
+        print("🗑️ VideoRecorder deinit - cleaning up...")
+        
         let timer = recordingTimer
         let session = captureSession
         
@@ -437,7 +500,12 @@ class VideoRecorder: NSObject, ObservableObject {
         
         Task.detached {
             if let session = session, session.isRunning {
+                print("🛑 Stopping session in deinit...")
                 session.stopRunning()
+                
+                // Wait for session to fully stop
+                try? await Task.sleep(for: .milliseconds(100))
+                print("✅ Session cleanup complete in deinit")
             }
         }
     }
