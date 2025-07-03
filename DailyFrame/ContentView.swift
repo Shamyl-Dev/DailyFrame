@@ -11,7 +11,6 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showingRecordingView = false
-    // 🔧 CHANGED: Use singleton instead of @StateObject
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
     var body: some View {
@@ -32,7 +31,7 @@ struct ContentView: View {
                     // Main calendar view - Allow it to expand
                     CalendarGridView(
                         showingRecordingView: $showingRecordingView,
-                        sharedVideoRecorder: sharedVideoRecorder // ✅ Pass singleton instance
+                        sharedVideoRecorder: sharedVideoRecorder
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, showingRecordingView ? -40 : 10)
@@ -41,6 +40,9 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
+        .onAppear {
+            print("📱 App started - camera remains OFF until needed")
+        }
     }
     
     private var headerView: some View {
@@ -77,7 +79,7 @@ struct ContentView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
+		                    .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(.quaternary.opacity(0.5), lineWidth: 0.5)
                     )

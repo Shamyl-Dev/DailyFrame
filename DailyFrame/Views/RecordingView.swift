@@ -6,9 +6,10 @@ struct RecordingView: View {
     let selectedDate: Date
     let existingEntry: DiaryEntry?
     @Binding var isPresented: Bool
-    let videoRecorder: VideoRecorder // ✅ Accept shared instance instead of creating new one
+    let videoRecorder: VideoRecorder
     
     @Environment(\.modelContext) private var modelContext
+    @State private var isInitializingCamera = false
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -46,8 +47,23 @@ struct RecordingView: View {
                     }
                 }
                 
-                // Recording area with real camera preview
-                recordingArea
+                // 🔧 NEW: Camera initialization loading state
+                if isInitializingCamera {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(1.2)
+                        
+                        Text("Initializing camera...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: 420)
+                } else {
+                    // Recording area with real camera preview
+                    recordingArea
+                }
                 
                 // Controls
                 controlsView
@@ -59,12 +75,22 @@ struct RecordingView: View {
             .padding(.bottom, 40)
         }
         .onAppear {
-            print("📹 RecordingView appeared - using existing session")
-            // Don't call any setup methods - just use the existing singleton
+            print("📹 RecordingView appeared - initializing camera")
+            isInitializingCamera = true
+            
+            Task {
+                await videoRecorder.initializeCamera()
+                await videoRecorder.startSession()
+                
+                // Small delay to ensure smooth transition
+                try? await Task.sleep(for: .milliseconds(200))
+                
+                isInitializingCamera = false
+            }
         }
         .onDisappear {
-            print("📹 RecordingView disappeared - singleton remains alive")
-            // Don't stop anything - singleton persists
+            print("📹 RecordingView disappeared - shutting down camera")
+            videoRecorder.shutdownCamera()
         }
         .onKeyDown { keyCode in
             if keyCode == 53 { // Escape key code

@@ -12,6 +12,7 @@ class VideoRecorder: NSObject, ObservableObject {
     @Published var hasPermission = false
     @Published var errorMessage: String?
     @Published var previewLayer: AVCaptureVideoPreviewLayer?
+    @Published var isSessionActive = false // 🔧 NEW: Track if session is active
     
     private var captureSession: AVCaptureSession?
     private var videoDeviceInput: AVCaptureDeviceInput?
@@ -23,70 +24,57 @@ class VideoRecorder: NSObject, ObservableObject {
     
     private let sessionQueue = DispatchQueue(label: "session queue")
     
-    // 🔧 NEW: Private initializer to enforce singleton
+    // 🔧 UPDATED: Private initializer - NO auto-initialization
     private override init() {
         super.init()
-        print("🎥 VideoRecorder singleton initialized")
-        Task {
-            await checkPermissions()
-        }
+        print("🎥 VideoRecorder singleton initialized (camera OFF)")
+        // 🔧 REMOVED: Don't auto-check permissions on init
+        // Task { await checkPermissions() }
     }
     
-    // 🔧 NEW: Clean reset method (improved)
-    func resetSession() {
-        print("🔄 Resetting video recorder session...")
+    // 🔧 NEW: Initialize camera only when needed
+    func initializeCamera() async {
+        print("🎥 Initializing camera on demand...")
         
-        // Stop any recording first
+        guard !isSessionConfigured else {
+            print("📹 Camera already initialized")
+            await startSession()
+            return
+        }
+        
+        await checkPermissions()
+    }
+    
+    // 🔧 NEW: Shutdown camera when not needed
+    func shutdownCamera() {
+        print("🎥 Shutting down camera...")
+        
+        // Stop recording if active
         if isRecording {
             Task {
                 await stopRecording()
             }
         }
         
-        // Stop timer
-        recordingTimer?.invalidate()
-        recordingTimer = nil
-        
-        // Reset state
-        isRecording = false
-        recordingDuration = 0
-        currentOutputURL = nil
-        
-        // Clean up session on background queue
+        // Stop session
         if let session = captureSession {
             Task.detached {
                 if session.isRunning {
-                    print("🛑 Stopping existing session...")
+                    print("🛑 Stopping camera session...")
                     session.stopRunning()
-                    
-                    // Wait for session to fully stop
-                    try? await Task.sleep(for: .milliseconds(200))
                 }
                 
                 Task { @MainActor in
-                    self.captureSession = nil
-                    self.videoDeviceInput = nil
-                    self.audioDeviceInput = nil
-                    self.movieFileOutput = nil
-                    self.previewLayer = nil
-                    self.isSessionConfigured = false
-                    print("✅ Session reset complete")
+                    self.isSessionActive = false
+                    print("📹 Camera session stopped")
                 }
             }
         }
     }
     
+    // 🔧 UPDATED: Only check permissions, don't auto-setup
     func checkPermissions() async {
         print("🔍 Checking permissions...")
-        
-        // 🔧 Don't reset if session is already configured and working
-        if isSessionConfigured && captureSession?.isRunning == true {
-            print("📹 Session already configured and running, skipping reset")
-            return
-        }
-        
-        // Debug available cameras first
-        debugCameraDevices()
         
         let cameraStatus = AVCaptureDevice.authorizationStatus(for: .video)
         let microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -132,16 +120,10 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
-    func refreshPermissions() {
-        Task {
-            await checkPermissions()
-        }
-    }
-    
+    // 🔧 UPDATED: Setup but don't auto-start
     private func setupCaptureSession() async {
-        // 🔧 NEW: Prevent multiple setups
-        if isSessionConfigured {
-            print("📹 Session already configured, skipping setup")
+        guard !isSessionConfigured else {
+            print("📹 Session already configured")
             return
         }
         
@@ -159,23 +141,19 @@ class VideoRecorder: NSObject, ObservableObject {
                 
                 // Add video input
                 do {
-                    // Try different camera discovery methods
                     var videoDevice: AVCaptureDevice?
                     
-                    // Method 1: Try built-in wide angle camera (front)
+                    // Try different camera discovery methods
                     videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
                     
-                    // Method 2: Try built-in wide angle camera (back)
                     if videoDevice == nil {
                         videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
                     }
                     
-                    // Method 3: Try any video device
                     if videoDevice == nil {
                         videoDevice = AVCaptureDevice.default(for: .video)
                     }
                     
-                    // Method 4: Use discovery session to find any available camera
                     if videoDevice == nil {
                         let discoverySession = AVCaptureDevice.DiscoverySession(
                             deviceTypes: [.builtInWideAngleCamera, .external],
@@ -244,40 +222,16 @@ class VideoRecorder: NSObject, ObservableObject {
                     session.addOutput(movieFileOutput)
                     print("📹 Movie output added successfully")
                     
-                    // Configure video connection
+                    // Configure connections
                     if let videoConnection = movieFileOutput.connection(with: .video) {
                         videoConnection.videoRotationAngle = 0
                         videoConnection.isEnabled = true
                         print("📹 Video connection configured and enabled")
-                    } else {
-                        print("⚠️ No video connection found")
                     }
                     
-                    // Configure audio connection
                     if let audioConnection = movieFileOutput.connection(with: .audio) {
                         audioConnection.isEnabled = true
                         print("🎤 Audio connection configured and enabled")
-                    } else {
-                        print("⚠️ No audio connection found")
-                    }
-                    
-                    // Verify connections exist and are enabled
-                    let allConnections = movieFileOutput.connections
-                    print("📊 Total connections: \(allConnections.count)")
-                    for (index, connection) in allConnections.enumerated() {
-                        // Get input ports to determine media type
-                        let mediaTypes = connection.inputPorts.compactMap { $0.mediaType }
-                        let mediaTypeString = mediaTypes.first?.rawValue ?? "unknown"
-                        print("📊 Connection \(index): \(mediaTypeString) - Enabled: \(connection.isEnabled) - Active: \(connection.isActive)")
-                    }
-                    
-                    if allConnections.isEmpty {
-                        Task { @MainActor in
-                            self.errorMessage = "No connections established between inputs and output"
-                        }
-                        session.commitConfiguration()
-                        continuation.resume()
-                        return
                     }
                     
                     Task { @MainActor in
@@ -304,19 +258,12 @@ class VideoRecorder: NSObject, ObservableObject {
                     previewLayer.videoGravity = .resizeAspectFill
                     self.previewLayer = previewLayer
                     self.errorMessage = nil
+                    self.isSessionConfigured = true
                     
-                    print("📹 Capture session setup completed successfully")
+                    print("📹 Capture session configured (but not started)")
                     
-                    // ✅ Auto-start the session after setup
-                    Task.detached {
-                        print("📹 Auto-starting capture session after setup...")
-                        session.startRunning()
-                        
-                        // Wait for session to stabilize
-                        try? await Task.sleep(for: .milliseconds(500))
-                        
-                        print("📹 Session auto-started: \(session.isRunning)")
-                      }
+                    // 🔧 CHANGED: Don't auto-start session
+                    // The session will be started when needed
                 }
                 
                 continuation.resume()
@@ -324,34 +271,39 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
-    // 🔧 UPDATED: Better session management
-    nonisolated func startSession() {
-        Task { @MainActor in
+    // 🔧 UPDATED: Start session only when needed
+    nonisolated func startSession() async {
+        await MainActor.run {
             guard let session = self.captureSession else { 
-                print("❌ No capture session to start - session may still be setting up")
+                print("❌ No capture session to start")
                 return 
+            }
+            
+            guard !session.isRunning else {
+                print("📹 Session already running")
+                self.isSessionActive = true
+                return
             }
             
             print("📹 Starting capture session...")
             
             Task.detached {
-                if !session.isRunning {
-                    session.startRunning()
-                    print("📹 Capture session started: \(session.isRunning)")
-                    
-                    // Wait for session to stabilize
-                    try? await Task.sleep(for: .milliseconds(500))
-                    print("📹 Session stabilization complete")
-                } else {
-                    print("📹 Session was already running")
+                session.startRunning()
+                
+                // Wait for session to stabilize
+                try? await Task.sleep(for: .milliseconds(500))
+                
+                Task { @MainActor in
+                    self.isSessionActive = session.isRunning
+                    print("📹 Session started: \(session.isRunning)")
                 }
             }
         }
     }
     
-    // 🔧 UPDATED: Better session cleanup
-    nonisolated func stopSession() {
-        Task { @MainActor in
+    // 🔧 UPDATED: Stop session when not needed
+    nonisolated func stopSession() async {
+        await MainActor.run {
             guard let session = self.captureSession else { return }
             
             print("🛑 Stopping capture session...")
@@ -360,6 +312,53 @@ class VideoRecorder: NSObject, ObservableObject {
                 if session.isRunning {
                     session.stopRunning()
                     print("🛑 Capture session stopped")
+                }
+                
+                Task { @MainActor in
+                    self.isSessionActive = false
+                }
+            }
+        }
+    }
+    
+    func resetSession() {
+        print("🔄 Resetting video recorder session...")
+        
+        // Stop any recording first
+        if isRecording {
+            Task {
+                await stopRecording()
+            }
+        }
+        
+        // Stop timer
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        // Reset state
+        isRecording = false
+        recordingDuration = 0
+        currentOutputURL = nil
+        
+        // Clean up session on background queue
+        if let session = captureSession {
+            Task.detached {
+                if session.isRunning {
+                    print("🛑 Stopping existing session...")
+                    session.stopRunning()
+                    
+                    // Wait for session to fully stop
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                
+                Task { @MainActor in
+                    self.captureSession = nil
+                    self.videoDeviceInput = nil
+                    self.audioDeviceInput = nil
+                    self.movieFileOutput = nil
+                    self.previewLayer = nil
+                    self.isSessionConfigured = false
+                    print("✅ Session reset complete")
                 }
             }
         }
@@ -570,6 +569,14 @@ class VideoRecorder: NSObject, ObservableObject {
         } catch {
             print("❌ Error reading videos directory: \(error)")
             return []
+        }
+    }
+    
+    // 🔧 NEW: Add the missing refreshPermissions method
+    func refreshPermissions() {
+        print("🔄 Refreshing permissions...")
+        Task {
+            await checkPermissions()
         }
     }
 }
