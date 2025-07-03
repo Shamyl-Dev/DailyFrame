@@ -7,7 +7,7 @@ struct CalendarGridView: View {
     @State private var currentMonth = Date()
     @State private var selectedEntryDate: Date?
     @Binding var showingRecordingView: Bool
-    let sharedVideoRecorder: VideoRecorder // ✅ Accept shared instance
+    let sharedVideoRecorder: VideoRecorder
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -40,13 +40,13 @@ struct CalendarGridView: View {
             .scaleEffect(showingRecordingView ? 0.95 : 1.0)
             .animation(.easeInOut(duration: 0.4), value: showingRecordingView)
             
-            // Recording view without dark overlay
+            // 🔧 UPDATED: Only one view - RecordingView handles everything
             if showingRecordingView, let selectedDate = selectedEntryDate {
                 RecordingView(
                     selectedDate: selectedDate,
                     existingEntry: entryForDate(selectedDate),
                     isPresented: $showingRecordingView,
-                    videoRecorder: sharedVideoRecorder // ✅ Pass shared instance
+                    videoRecorder: sharedVideoRecorder
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.asymmetric(
@@ -110,8 +110,8 @@ struct CalendarGridView: View {
                             isCurrentMonth: calendar.isDate(date, equalTo: currentMonth, toGranularity: .month),
                             isToday: calendar.isDateInToday(date),
                             onTap: {
-                                // Handle day cell tap
                                 selectedEntryDate = date
+                                // 🔧 SIMPLIFIED: Always open RecordingView - it will handle video/recording logic
                                 showingRecordingView = true
                             }
                         )
@@ -184,6 +184,11 @@ struct DayCell: View {
         return formatter
     }()
     
+    // 🔧 Check if video exists for this date
+    private var hasVideo: Bool {
+        VideoRecorder.shared.getVideoURL(for: date) != nil
+    }
+    
     var body: some View {
         ZStack {
             // Main card background
@@ -194,32 +199,55 @@ struct DayCell: View {
                         .strokeBorder(borderColor, lineWidth: isToday ? 2 : 0)
                 )
             
-            VStack {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(dayFormatter.string(from: date))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(dayTextColor)
                     Spacer()
+                    
+                    // Video indicator
+                    if hasVideo {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.blue)
+                    }
                 }
                 
                 Spacer()
                 
-                // Just a small dot for entries
+                // Entry indicator
                 if entry != nil {
                     Circle()
                         .fill(.blue)
                         .frame(width: 6, height: 6)
-                        .padding(.bottom, 8)
                 }
             }
             .padding(8)
+            
+            // 🔧 UPDATED: Hover overlay shows appropriate action
+            if isHovered && isCurrentMonth {
+                VStack {
+                    Image(systemName: hasVideo ? "play.fill" : "video.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.blue)
+                    
+                    Text(hasVideo ? "Watch" : "Record")
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                }
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minHeight: 80)
         .scaleEffect(isHovered ? 1.05 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isHovered)
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
         }
         .onTapGesture {
             onTap()

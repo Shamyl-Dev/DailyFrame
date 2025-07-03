@@ -412,9 +412,8 @@ class VideoRecorder: NSObject, ObservableObject {
         
         print("📹 Starting recording with \(activeConnections.count) active connections")
         
-        // 🎬 FIXED: Use Documents directory (always accessible)
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        // 🔧 FIXED: Use app's sandboxed directory
+        let videosDirectory = getVideosDirectory()
         
         do {
             try FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
@@ -527,11 +526,10 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
-    // Add these methods to your VideoRecorder class:
+    // Update these methods in your VideoRecorder class:
     
     func showVideosInFinder() {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        let videosDirectory = getVideosDirectory()
         
         // Create directory if it doesn't exist
         try? FileManager.default.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
@@ -542,30 +540,31 @@ class VideoRecorder: NSObject, ObservableObject {
     }
     
     func getVideoURL(for date: Date) -> URL? {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        let videosDirectory = getVideosDirectory()
         
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let filename = "\(dateFormatter.string(from: date)).mov"
         let videoURL = videosDirectory.appendingPathComponent(filename)
         
-        return FileManager.default.fileExists(atPath: videoURL.path) ? videoURL : nil
+        let exists = FileManager.default.fileExists(atPath: videoURL.path)
+        print("🔍 Checking video at: \(videoURL.path) - Exists: \(exists)")
+        
+        return exists ? videoURL : nil
     }
     
     func getVideosDirectoryPath() -> String {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
-        return videosDirectory.path
+        return getVideosDirectory().path
     }
     
     func getAllVideoFiles() -> [URL] {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videosDirectory = documentsPath.appendingPathComponent("DailyFrame", isDirectory: true)
+        let videosDirectory = getVideosDirectory()
         
         do {
             let files = try FileManager.default.contentsOfDirectory(at: videosDirectory, includingPropertiesForKeys: nil)
-            return files.filter { $0.pathExtension.lowercased() == "mov" }
+            let videoFiles = files.filter { $0.pathExtension.lowercased() == "mov" }
+            print("📁 Found \(videoFiles.count) video files in: \(videosDirectory.path)")
+            return videoFiles
         } catch {
             print("❌ Error reading videos directory: \(error)")
             return []
@@ -577,6 +576,51 @@ class VideoRecorder: NSObject, ObservableObject {
         print("🔄 Refreshing permissions...")
         Task {
             await checkPermissions()
+        }
+    }
+    
+    // Add this method to VideoRecorder for debugging
+    func debugVideoDirectories() {
+        print("🔍 === VIDEO DIRECTORY DEBUG ===")
+        
+        // Check where we think videos should be
+        let expectedDir = getVideosDirectory()
+        print("📁 Expected directory: \(expectedDir.path)")
+        print("📁 Directory exists: \(FileManager.default.fileExists(atPath: expectedDir.path))")
+        
+        // List all files in the directory
+        do {
+            let files = try FileManager.default.contentsOfDirectory(atPath: expectedDir.path)
+            print("📁 Files in directory: \(files)")
+        } catch {
+            print("❌ Cannot read directory: \(error)")
+        }
+        
+        // Check the app's sandbox container
+        if let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            print("📁 App's Documents directory: \(documentsURL.path)")
+            
+            do {
+                let contents = try FileManager.default.contentsOfDirectory(atPath: documentsURL.path)
+                print("📁 Documents contents: \(contents)")
+            } catch {
+                print("❌ Cannot read Documents: \(error)")
+            }
+        }
+        
+        print("🔍 === END DEBUG ===")
+    }
+    
+    // 🔧 NEW: Helper method to get the correct videos directory
+    private func getVideosDirectory() -> URL {
+        // Get the app's container directory (sandboxed)
+        if let containerURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            return containerURL.appendingPathComponent("DailyFrame", isDirectory: true)
+        } else {
+            // Fallback to application support directory
+            let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.shamyldev.DailyFrame"
+            return appSupportURL.appendingPathComponent(bundleID).appendingPathComponent("Videos", isDirectory: true)
         }
     }
 }

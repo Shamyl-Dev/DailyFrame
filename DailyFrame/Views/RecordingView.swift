@@ -1,6 +1,28 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
+import AVKit
+
+// 🔧 UPDATED: Add Equatable conformance
+enum RecordingViewState: Equatable {
+    case initializing
+    case recording
+    case playback(URL)
+    
+    // 🔧 NEW: Implement Equatable manually since URL needs special handling
+    static func == (lhs: RecordingViewState, rhs: RecordingViewState) -> Bool {
+        switch (lhs, rhs) {
+        case (.initializing, .initializing):
+            return true
+        case (.recording, .recording):
+            return true
+        case (.playback(let lhsURL), .playback(let rhsURL)):
+            return lhsURL == rhsURL
+        default:
+            return false
+        }
+    }
+}
 
 struct RecordingView: View {
     let selectedDate: Date
@@ -9,7 +31,9 @@ struct RecordingView: View {
     let videoRecorder: VideoRecorder
     
     @Environment(\.modelContext) private var modelContext
-    @State private var isInitializingCamera = false
+    @State private var currentState: RecordingViewState = .initializing
+    @State private var player: AVPlayer?
+    @State private var showingReRecordConfirmation = false
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -21,51 +45,30 @@ struct RecordingView: View {
     
     var body: some View {
         ZStack {
-            // Background blur
+            // Background blur (stays consistent)
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
             
             VStack(spacing: 12) {
-                // Header with back button
+                // Header (stays consistent across all states)
                 headerView
                 
-                // Date display
+                // Date display (stays consistent)
                 VStack(spacing: 4) {
                     Text(dateFormatter.string(from: selectedDate))
                         .font(.title2)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                     
-                    if existingEntry != nil {
-                        Text("Update your entry")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("Create your daily entry")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(stateSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 
-                // 🔧 NEW: Camera initialization loading state
-                if isInitializingCamera {
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(1.2)
-                        
-                        Text("Initializing camera...")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .frame(minHeight: 420)
-                } else {
-                    // Recording area with real camera preview
-                    recordingArea
-                }
+                // Main content area (swaps based on state)
+                mainContentArea
                 
-                // Controls
+                // Controls (adapts based on state)
                 controlsView
                 
                 Spacer(minLength: 12)
@@ -75,29 +78,25 @@ struct RecordingView: View {
             .padding(.bottom, 40)
         }
         .onAppear {
-            print("📹 RecordingView appeared - initializing camera")
-            isInitializingCamera = true
-            
-            Task {
-                await videoRecorder.initializeCamera()
-                await videoRecorder.startSession()
-                
-                // Small delay to ensure smooth transition
-                try? await Task.sleep(for: .milliseconds(200))
-                
-                isInitializingCamera = false
-            }
+            initializeView()
         }
         .onDisappear {
-            print("📹 RecordingView disappeared - shutting down camera")
-            videoRecorder.shutdownCamera()
+            cleanupView()
         }
         .onKeyDown { keyCode in
-            if keyCode == 53 { // Escape key code
+            if keyCode == 53 { // Escape key
                 isPresented = false
                 return true
             }
             return false
+        }
+        .alert("Re-record Video", isPresented: $showingReRecordConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Re-record", role: .destructive) {
+                reRecordVideo()
+            }
+        } message: {
+            Text("Are you sure you want to delete this video and record a new one? This action cannot be undone.")
         }
         .alert("Permission Required", isPresented: .constant(videoRecorder.errorMessage != nil && !videoRecorder.hasPermission)) {
             Button("Retry") {
@@ -110,6 +109,21 @@ struct RecordingView: View {
             Text(videoRecorder.errorMessage ?? "Camera and microphone access is required.")
         }
     }
+    
+    // MARK: - State-dependent properties
+    
+    private var stateSubtitle: String {
+        switch currentState {
+        case .initializing:
+            return existingEntry != nil ? "Update your entry" : "Create your daily entry"
+        case .recording:
+            return "Recording your daily entry"
+        case .playback:
+            return "Your daily entry"
+        }
+    }
+    
+    // MARK: - Views
     
     private var headerView: some View {
         HStack {
@@ -135,9 +149,9 @@ struct RecordingView: View {
         .padding(.top, 4)
     }
     
-    private var recordingArea: some View {
+    private var mainContentArea: some View {
         ZStack {
-            // Camera preview background
+            // Consistent background for all states
             RoundedRectangle(cornerRadius: 20)
                 .fill(.black)
                 .overlay(
@@ -147,40 +161,42 @@ struct RecordingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .frame(minHeight: 420)
             
-            // Real camera preview or placeholder
+            // Content based on current state
+            Group {
+                switch currentState {
+                case .initializing:
+                    initializingContent
+                case .recording:
+                    recordingContent
+                case .playback(let videoURL):
+                    playbackContent(videoURL: videoURL)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        }
+    }
+    
+    private var initializingContent: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle())
+                .scaleEffect(1.2)
+                .tint(.white)
+            
+            Text("Initializing camera...")
+                .foregroundStyle(.white)
+                .font(.subheadline)
+        }
+    }
+    
+    private var recordingContent: some View {
+        ZStack {
+            // Camera preview or placeholder
             if videoRecorder.hasPermission, let previewLayer = videoRecorder.previewLayer {
                 CameraPreviewView(previewLayer: previewLayer)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
             } else {
-                // Placeholder when no camera access
-                VStack(spacing: 16) {
-                    Image(systemName: videoRecorder.hasPermission ? "video.fill" : "video.slash.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.quaternary)
-                    
-                    Text(videoRecorder.hasPermission ? "Camera Preview" : "Camera Access Required")
-                        .font(.title3)
-                        .foregroundStyle(.quaternary)
-                    
-                    if !videoRecorder.hasPermission {
-                        VStack(spacing: 8) {
-                            Text("Grant camera and microphone permissions to record videos")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                            
-                            Button("Refresh Permissions") {
-                                videoRecorder.refreshPermissions()
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
-                            .font(.caption)
-                        }
-                    }
-                }
+                cameraPlaceholder
             }
             
             // Recording indicator overlay
@@ -213,7 +229,77 @@ struct RecordingView: View {
         }
     }
     
+    private func playbackContent(videoURL: URL) -> some View {
+        Group {
+            if let player = player {
+                VideoPlayer(player: player)
+            } else {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(1.2)
+                        .tint(.white)
+                    
+                    Text("Loading video...")
+                        .foregroundStyle(.white)
+                        .font(.subheadline)
+                }
+            }
+        }
+    }
+    
+    private var cameraPlaceholder: some View {
+        VStack(spacing: 16) {
+            Image(systemName: videoRecorder.hasPermission ? "video.fill" : "video.slash.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.quaternary)
+            
+            Text(videoRecorder.hasPermission ? "Camera Preview" : "Camera Access Required")
+                .font(.title3)
+                .foregroundStyle(.quaternary)
+            
+            if !videoRecorder.hasPermission {
+                VStack(spacing: 8) {
+                    Text("Grant camera and microphone permissions to record videos")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    
+                    Button("Refresh Permissions") {
+                        videoRecorder.refreshPermissions()
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+                    .font(.caption)
+                }
+            }
+        }
+    }
+    
     private var controlsView: some View {
+        VStack(spacing: 16) {
+            // State-specific controls
+            switch currentState {
+            case .initializing:
+                EmptyView()
+                
+            case .recording:
+                recordingControls
+                
+            case .playback:
+                playbackControls
+            }
+            
+            // Common controls
+            commonControls
+        }
+        .animation(.easeInOut(duration: 0.3), value: currentState)
+    }
+    
+    private var recordingControls: some View {
         VStack(spacing: 16) {
             // Recording duration progress
             if videoRecorder.isRecording {
@@ -261,8 +347,44 @@ struct RecordingView: View {
             .scaleEffect(videoRecorder.isRecording ? 1.02 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: videoRecorder.isRecording)
             .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
-            
-            // Show Videos Button
+        }
+    }
+    
+    private var playbackControls: some View {
+        VStack(spacing: 16) {
+            // Re-record button
+            Button(action: {
+                showingReRecordConfirmation = true
+            }) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(.orange)
+                        .frame(width: 8, height: 8)
+                    
+                    Text("Re-record")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .strokeBorder(.quaternary, lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        }
+    }
+    
+    private var commonControls: some View {
+        VStack(spacing: 12) {
+            // Show Videos Button (only when not recording)
             if !videoRecorder.isRecording {
                 Button(action: {
                     videoRecorder.showVideosInFinder()
@@ -282,19 +404,121 @@ struct RecordingView: View {
                 .transition(.opacity)
             }
             
-            Text(videoRecorder.isRecording ? "Recording in progress" : (videoRecorder.hasPermission ? "Ready to record" : "Grant permissions to continue"))
+            // Status text
+            Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .transition(.opacity)
         }
-        .animation(.easeInOut(duration: 0.3), value: videoRecorder.isRecording)
     }
+    
+    private var statusText: String {
+        switch currentState {
+        case .initializing:
+            return "Setting up camera..."
+        case .recording:
+            return videoRecorder.isRecording ? "Recording in progress" : (videoRecorder.hasPermission ? "Ready to record" : "Grant permissions to continue")
+        case .playback:
+            return "Tap to play, pause, or seek"
+        }
+    }
+    
+    // MARK: - State Management
+    
+    private func initializeView() {
+        print("📹 RecordingView appeared - checking for existing video")
+        
+        // Check if video already exists for this date
+        if let videoURL = videoRecorder.getVideoURL(for: selectedDate) {
+            // Video exists, go directly to playback
+            transitionToPlayback(videoURL: videoURL)
+        } else {
+            // No video, start camera initialization
+            currentState = .initializing
+            
+            Task {
+                await videoRecorder.initializeCamera()
+                await videoRecorder.startSession()
+                
+                // Small delay for smooth transition
+                try? await Task.sleep(for: .milliseconds(200))
+                
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentState = .recording
+                    }
+                }
+            }
+        }
+    }
+    
+    private func cleanupView() {
+        print("📹 RecordingView disappeared - shutting down camera")
+        
+        // Clean up player
+        player?.pause()
+        player = nil
+        
+        // Only shutdown camera if we're not in playback mode
+        if case .recording = currentState {
+            videoRecorder.shutdownCamera()
+        }
+    }
+    
+    private func transitionToPlayback(videoURL: URL) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentState = .playback(videoURL)
+        }
+        
+        // Setup video player
+        player = AVPlayer(url: videoURL)
+        player?.play()
+        
+        // Shutdown camera since we're now in playback mode
+        videoRecorder.shutdownCamera()
+    }
+    
+    private func reRecordVideo() {
+        // Delete existing video
+        if case .playback(let videoURL) = currentState {
+            try? FileManager.default.removeItem(at: videoURL)
+        }
+        
+        // Clean up player
+        player?.pause()
+        player = nil
+        
+        // Transition back to recording mode
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentState = .initializing
+        }
+        
+        // Reinitialize camera
+        Task {
+            await videoRecorder.initializeCamera()
+            await videoRecorder.startSession()
+            
+            try? await Task.sleep(for: .milliseconds(200))
+            
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentState = .recording
+                }
+            }
+        }
+    }
+    
+    // MARK: - Recording Logic
     
     private func toggleRecording() {
         Task {
             if videoRecorder.isRecording {
                 if let videoURL = await videoRecorder.stopRecording() {
                     await saveEntry(videoURL: videoURL)
+                    // Transition to playback after recording
+                    await MainActor.run {
+                        transitionToPlayback(videoURL: videoURL)
+                    }
                 }
             } else {
                 let _ = await videoRecorder.startRecording(for: selectedDate)
@@ -325,7 +549,7 @@ struct RecordingView: View {
     }
 }
 
-// Keep the existing key handling extensions...
+// Keep existing extensions...
 extension View {
     func onKeyDown(perform action: @escaping (UInt16) -> Bool) -> some View {
         self.background(KeyEventHandlingView(onKeyDown: action))
@@ -375,7 +599,7 @@ class KeyHandlingNSView: NSView {
         selectedDate: Date(),
         existingEntry: nil,
         isPresented: .constant(true),
-        videoRecorder: VideoRecorder.shared // ✅ Use singleton
+        videoRecorder: VideoRecorder.shared
     )
     .modelContainer(for: DiaryEntry.self, inMemory: true)
 }
