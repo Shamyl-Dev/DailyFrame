@@ -21,6 +21,8 @@ class VideoRecorder: NSObject, ObservableObject {
     private var recordingTimer: Timer?
     private var currentOutputURL: URL?
     private var isSessionConfigured = false
+    private var isSessionStarting = false
+    private var isSessionStopping = false
     
     private let sessionQueue = DispatchQueue(label: "session queue")
     
@@ -132,8 +134,11 @@ class VideoRecorder: NSObject, ObservableObject {
                 let session = AVCaptureSession()
                 session.beginConfiguration()
                 
+                // 🔧 OPTIMIZED: Use medium preset to reduce GPU usage
                 if session.canSetSessionPreset(.high) {
                     session.sessionPreset = .high
+                } else if session.canSetSessionPreset(.medium) {
+                    session.sessionPreset = .medium
                 }
                 
                 var videoDeviceInput: AVCaptureDeviceInput?
@@ -271,44 +276,89 @@ class VideoRecorder: NSObject, ObservableObject {
         }
     }
     
-    // 🔧 UPDATED: Start session only when needed
+    // 🔧 OPTIMIZED: Start session only when needed with proper guards
     nonisolated func startSession() async {
-        await MainActor.run {
+        // Check if we're already in a good state
+        let shouldStart = await MainActor.run {
             guard let session = self.captureSession else { 
                 print("❌ No capture session to start")
-                return 
+                return false
             }
             
             guard !session.isRunning else {
                 print("📹 Session already running")
                 self.isSessionActive = true
-                return
+                return false
             }
             
-            print("📹 Starting capture session...")
+            guard !self.isSessionStarting else { 
+                print("📹 Session already starting")
+                return false
+            }
             
-            Task.detached {
+            self.isSessionStarting = true
+            return true
+        }
+        
+        guard shouldStart else { return }
+        
+        // Use sessionQueue consistently for all session operations
+        await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                guard let session = self.captureSession else {
+                    Task { @MainActor in
+                        self.isSessionStarting = false
+                    }
+                    continuation.resume()
+                    return
+                }
+                
+                print("📹 Starting capture session...")
                 session.startRunning()
                 
-                // Wait for session to stabilize
-                try? await Task.sleep(for: .milliseconds(500))
+                // Minimal stabilization time (reduced from 500ms)
+                Thread.sleep(forTimeInterval: 0.1)
                 
                 Task { @MainActor in
                     self.isSessionActive = session.isRunning
+                    self.isSessionStarting = false
                     print("📹 Session started: \(session.isRunning)")
                 }
+                
+                continuation.resume()
             }
         }
     }
     
-    // 🔧 UPDATED: Stop session when not needed
+    // 🔧 OPTIMIZED: Stop session with proper guards
     nonisolated func stopSession() async {
-        await MainActor.run {
-            guard let session = self.captureSession else { return }
+        let shouldStop = await MainActor.run {
+            guard let session = self.captureSession else { return false }
+            guard session.isRunning else { 
+                self.isSessionActive = false
+                return false
+            }
+            guard !self.isSessionStopping else { return false }
             
-            print("🛑 Stopping capture session...")
-            
-            Task.detached {
+            self.isSessionStopping = true
+            return true
+        }
+        
+        guard shouldStop else { return }
+        
+        // Use sessionQueue consistently
+        await withCheckedContinuation { continuation in
+            sessionQueue.async {
+                guard let session = self.captureSession else {
+                    Task { @MainActor in
+                        self.isSessionStopping = false
+                    }
+                    continuation.resume()
+                    return
+                }
+                
+                print("🛑 Stopping capture session...")
+                
                 if session.isRunning {
                     session.stopRunning()
                     print("🛑 Capture session stopped")
@@ -316,7 +366,10 @@ class VideoRecorder: NSObject, ObservableObject {
                 
                 Task { @MainActor in
                     self.isSessionActive = false
+                    self.isSessionStopping = false
                 }
+                
+                continuation.resume()
             }
         }
     }

@@ -425,6 +425,7 @@ struct RecordingView: View {
     
     // MARK: - State Management
     
+    // 🔧 OPTIMIZED: State transitions with session guards
     private func initializeView() {
         print("📹 RecordingView appeared - checking for existing video")
         
@@ -433,18 +434,21 @@ struct RecordingView: View {
             // Video exists, go directly to playback
             transitionToPlayback(videoURL: videoURL)
         } else {
-            // No video, start camera initialization
+            // No video, start camera initialization only if needed
             currentState = .initializing
             
             Task {
-                await videoRecorder.initializeCamera()
-                await videoRecorder.startSession()
+                // 🔧 OPTIMIZED: Only initialize if not already configured
+                if !videoRecorder.isSessionActive {
+                    await videoRecorder.initializeCamera()
+                    await videoRecorder.startSession()
+                }
                 
-                // Small delay for smooth transition
-                try? await Task.sleep(for: .milliseconds(200))
+                // 🔧 OPTIMIZED: Reduced delay and animation duration
+                try? await Task.sleep(for: .milliseconds(100))
                 
                 await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
                         currentState = .recording
                     }
                 }
@@ -452,30 +456,47 @@ struct RecordingView: View {
         }
     }
     
+    // 🔧 OPTIMIZED: Proper cleanup with memory management
     private func cleanupView() {
-        print("📹 RecordingView disappeared - shutting down camera")
+        print("📹 RecordingView disappeared - cleaning up resources")
         
-        // Clean up player
-        player?.pause()
-        player = nil
+        // 🔧 OPTIMIZED: Proper video player cleanup
+        if let existingPlayer = player {
+            existingPlayer.pause()
+            existingPlayer.replaceCurrentItem(with: nil)
+            player = nil
+        }
         
-        // Only shutdown camera if we're not in playback mode
-        if case .recording = currentState {
-            videoRecorder.shutdownCamera()
+        // 🔧 OPTIMIZED: Always stop session when leaving view to save resources
+        Task {
+            await videoRecorder.stopSession()
         }
     }
     
+    // 🔧 OPTIMIZED: Improved playback transition with proper cleanup
     private func transitionToPlayback(videoURL: URL) {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        // 🔧 OPTIMIZED: Clean up existing player first
+        if let existingPlayer = player {
+            existingPlayer.pause()
+            existingPlayer.replaceCurrentItem(with: nil)
+            player = nil
+        }
+        
+        withAnimation(.easeInOut(duration: 0.15)) {
             currentState = .playback(videoURL)
         }
         
-        // Setup video player
-        player = AVPlayer(url: videoURL)
-        player?.play()
-        
-        // Shutdown camera since we're now in playback mode
-        videoRecorder.shutdownCamera()
+        // 🔧 OPTIMIZED: Setup video player with proper resource management
+        Task {
+            let newPlayer = AVPlayer(url: videoURL)
+            await MainActor.run {
+                self.player = newPlayer
+                newPlayer.play()
+            }
+            
+            // Stop camera session to free resources
+            await videoRecorder.stopSession()
+        }
     }
     
     private func reRecordVideo() {

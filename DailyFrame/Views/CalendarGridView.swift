@@ -36,9 +36,10 @@ struct CalendarGridView: View {
             }
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
             .padding()
-            .blur(radius: showingRecordingView ? 8 : 0)
-            .scaleEffect(showingRecordingView ? 0.95 : 1.0)
-            .animation(.easeInOut(duration: 0.4), value: showingRecordingView)
+            // 🔧 OPTIMIZED: Simplified transitions for better performance
+            .opacity(showingRecordingView ? 0.3 : 1.0)
+            .scaleEffect(showingRecordingView ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: showingRecordingView)
             
             // 🔧 UPDATED: Only one view - RecordingView handles everything
             if showingRecordingView, let selectedDate = selectedEntryDate {
@@ -242,12 +243,15 @@ struct DayCell: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minHeight: 80)
-        .scaleEffect(isHovered ? 1.05 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isHovered)
+        // 🔧 OPTIMIZED: Reduced scale effect for better performance
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: isHovered)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovered = hovering
-            }
+            // 🔧 OPTIMIZED: Only enable hover for current month to reduce animations
+            guard isCurrentMonth else { return }
+            
+            // 🔧 OPTIMIZED: Instant state change without animation to reduce GPU load
+            isHovered = hovering
         }
         .onTapGesture {
             onTap()
