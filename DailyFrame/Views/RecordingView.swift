@@ -45,8 +45,12 @@ struct RecordingView: View {
     
     var body: some View {
         ZStack {
-            // Background blur (stays consistent)
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+            // 🔧 REMOVE: Don't block the parent blur with black background
+            // Color.black.opacity(0.9)
+            //     .ignoresSafeArea()
+            
+            // 🔧 SOLUTION: Let ContentView's blur show through
+            Color.clear
                 .ignoresSafeArea()
             
             VStack(spacing: 12) {
@@ -78,7 +82,7 @@ struct RecordingView: View {
             .padding(.bottom, 40)
         }
         .onAppear {
-            initializeView()
+            initializeView()  // 🔧 CHANGED: Use existing method name
         }
         .onDisappear {
             cleanupView()
@@ -151,12 +155,12 @@ struct RecordingView: View {
     
     private var mainContentArea: some View {
         ZStack {
-            // Consistent background for all states
+            // 🔧 SOLUTION: Semi-transparent background that works with parent blur
             RoundedRectangle(cornerRadius: 20)
-                .fill(.black)
+                .fill(.black.opacity(0.85)) // Semi-transparent to let blur show through edges
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
-                        .strokeBorder(.quaternary, lineWidth: 1)
+                        .strokeBorder(.quaternary.opacity(0.3), lineWidth: 1)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .frame(minHeight: 420)
@@ -175,6 +179,7 @@ struct RecordingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
+        .compositingGroup() // Keep this to isolate video rendering
     }
     
     private var initializingContent: some View {
@@ -232,7 +237,10 @@ struct RecordingView: View {
     private func playbackContent(videoURL: URL) -> some View {
         Group {
             if let player = player {
+                // 🔧 SOLUTION: Simple VideoPlayer with solid background - no nested blur layers
                 VideoPlayer(player: player)
+                    .background(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
             } else {
                 VStack(spacing: 16) {
                     ProgressView()

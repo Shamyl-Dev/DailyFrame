@@ -22,26 +22,26 @@ struct CalendarGridView: View {
     
     var body: some View {
         ZStack {
-            // Main calendar view
-            VStack(spacing: 0) {
-                // Header with month/year and navigation
-                headerView
-                
-                // Days of week
-                weekdayHeader
-                
-                // Calendar grid
-                calendarGrid
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 🔧 SOLUTION: Only show calendar when NOT in RecordingView
+            if !showingRecordingView {
+                // Main calendar view
+                VStack(spacing: 0) {
+                    // Header with month/year and navigation
+                    headerView
+                    
+                    // Days of week
+                    weekdayHeader
+                    
+                    // Calendar grid
+                    calendarGrid
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .padding()
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .padding()
-            // 🔧 OPTIMIZED: Simplified transitions for better performance
-            .opacity(showingRecordingView ? 0.3 : 1.0)
-            .scaleEffect(showingRecordingView ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.2), value: showingRecordingView)
             
-            // 🔧 UPDATED: Only one view - RecordingView handles everything
+            // RecordingView (when active)
             if showingRecordingView, let selectedDate = selectedEntryDate {
                 RecordingView(
                     selectedDate: selectedDate,
