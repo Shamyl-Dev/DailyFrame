@@ -228,12 +228,12 @@ struct DayCell: View {
                 GeometryReader { geo in
                     // Thumbnail is 80% of cell width, 45% of cell height (adjust as you like)
                     let thumbWidth = geo.size.width * 0.8
-                    let thumbHeight = geo.size.height * 0.45
+                    let thumbHeight = geo.size.height * 0.55
 
                     VStack {
-                        Spacer()
+                        Spacer(minLength: geo.size.height * 0.27)
                         HStack {
-                            Spacer()
+                            Spacer() 
                             Image(nsImage: thumbnail)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
