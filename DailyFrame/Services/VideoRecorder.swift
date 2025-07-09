@@ -713,3 +713,18 @@ enum RecorderError: Error, LocalizedError {
         }
     }
 }
+
+import AVFoundation
+
+extension VideoRecorder {
+    func generateThumbnail(for url: URL) -> NSImage? {
+        let asset = AVAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        let time = CMTime(seconds: 0.5, preferredTimescale: 600)
+        if let cgImage = try? imageGenerator.copyCGImage(at: time, actualTime: nil) {
+            return NSImage(cgImage: cgImage, size: .zero)
+        }
+        return nil
+    }
+}

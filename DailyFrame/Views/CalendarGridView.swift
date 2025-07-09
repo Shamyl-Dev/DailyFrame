@@ -176,20 +176,21 @@ struct DayCell: View {
     let isCurrentMonth: Bool
     let isToday: Bool
     let onTap: () -> Void
-    
+
     @State private var isHovered = false
-    
+    @State private var thumbnail: NSImage?
+
     private let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "d"
         return formatter
     }()
-    
+
     // 🔧 Check if video exists for this date
     private var hasVideo: Bool {
         VideoRecorder.shared.getVideoURL(for: date) != nil
     }
-    
+
     var body: some View {
         ZStack {
             // Main card background
@@ -199,25 +200,20 @@ struct DayCell: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(borderColor, lineWidth: isToday ? 2 : 0)
                 )
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(dayFormatter.string(from: date))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(dayTextColor)
                     Spacer()
-                    
-                    // Video indicator
                     if hasVideo {
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 12))
                             .foregroundStyle(.blue)
                     }
                 }
-                
                 Spacer()
-                
-                // Entry indicator
                 if entry != nil {
                     Circle()
                         .fill(.blue)
@@ -225,40 +221,66 @@ struct DayCell: View {
                 }
             }
             .padding(8)
-            
-            // 🔧 UPDATED: Hover overlay shows appropriate action
-            if isHovered && isCurrentMonth {
-                VStack {
-                    Image(systemName: hasVideo ? "play.fill" : "video.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.blue)
-                    
-                    Text(hasVideo ? "Watch" : "Record")
-                        .font(.caption2)
-                        .foregroundStyle(.blue)
+            .zIndex(1)
+
+            // --- Internal Popover Thumbnail Preview ---
+            if isHovered && hasVideo, let thumbnail = thumbnail {
+                GeometryReader { geo in
+                    // Thumbnail is 80% of cell width, 45% of cell height (adjust as you like)
+                    let thumbWidth = geo.size.width * 0.8
+                    let thumbHeight = geo.size.height * 0.45
+
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Image(nsImage: thumbnail)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: thumbWidth, height: thumbHeight)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .shadow(radius: 6, y: 2)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                                )
+                                .transition(.opacity.combined(with: .scale))
+                                .zIndex(10)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .background(Color.clear)
+                    .transition(.opacity.combined(with: .scale))
+                    .zIndex(2)
                 }
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .frame(minHeight: 80)
-        // 🔧 OPTIMIZED: Reduced scale effect for better performance
         .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.easeInOut(duration: 0.1), value: isHovered)
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
         .onHover { hovering in
-            // 🔧 OPTIMIZED: Only enable hover for current month to reduce animations
             guard isCurrentMonth else { return }
-            
-            // 🔧 OPTIMIZED: Instant state change without animation to reduce GPU load
             isHovered = hovering
+            if hovering && hasVideo {
+                if thumbnail == nil, let url = VideoRecorder.shared.getVideoURL(for: date) {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let thumb = VideoRecorder.shared.generateThumbnail(for: url)
+                        DispatchQueue.main.async {
+                            self.thumbnail = thumb
+                        }
+                    }
+                }
+            }
         }
         .onTapGesture {
             onTap()
         }
         .opacity(isCurrentMonth ? 1.0 : 0.3)
     }
-    
+
+    // Color helpers (if not already present)
     private var dayTextColor: Color {
         if isToday {
             return .primary
@@ -268,7 +290,7 @@ struct DayCell: View {
             return .secondary
         }
     }
-    
+
     private var dayBackgroundColor: Color {
         if isToday {
             return .accentColor.opacity(0.1)
@@ -278,7 +300,7 @@ struct DayCell: View {
             return .clear
         }
     }
-    
+
     private var borderColor: Color {
         isToday ? .accentColor : .clear
     }
