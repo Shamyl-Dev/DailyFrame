@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import AVKit
+import Combine
 
 struct CalendarGridView: View {
     @Query private var entries: [DiaryEntry]
@@ -179,6 +181,12 @@ struct DayCell: View {
 
     @State private var isHovered = false
     @State private var thumbnail: NSImage?
+    @State private var showLivePreview = false
+    @State private var livePreviewTimer: Timer?
+    @State private var player: AVPlayer?
+    @State private var playerReady = false
+    @State private var playerStatusCancellable: AnyCancellable?
+    @State private var hideThumbnail = false
 
     private let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -224,28 +232,33 @@ struct DayCell: View {
             .zIndex(1)
 
             // --- Internal Popover Thumbnail Preview ---
-            if isHovered && hasVideo, let thumbnail = thumbnail {
+            if isHovered && hasVideo {
                 GeometryReader { geo in
-                    // Thumbnail is 80% of cell width, 45% of cell height (adjust as you like)
                     let thumbWidth = geo.size.width * 0.8
                     let thumbHeight = geo.size.height * 0.55
 
                     VStack {
                         Spacer(minLength: geo.size.height * 0.27)
                         HStack {
-                            Spacer() 
-                            Image(nsImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: thumbWidth, height: thumbHeight)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .shadow(radius: 6, y: 2)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                                )
-                                .transition(.opacity.combined(with: .scale))
-                                .zIndex(10)
+                            Spacer()
+                            ZStack {
+                                if let thumbnail = thumbnail {
+                                    Image(nsImage: thumbnail)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: thumbWidth, height: thumbHeight)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .opacity(showLivePreview && hideThumbnail ? 0 : 1)
+                                        .animation(.easeInOut(duration: 0.18), value: showLivePreview && hideThumbnail)
+                                }
+                                if showLivePreview, let player = player {
+                                    VideoPreviewPlayer(player: player)
+                                        .frame(width: thumbWidth, height: thumbHeight)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .opacity(playerReady ? 1 : 0)
+                                        .animation(.easeInOut(duration: 0.2), value: playerReady)
+                                }
+                            }
                             Spacer()
                         }
                         Spacer()
@@ -263,15 +276,60 @@ struct DayCell: View {
         .onHover { hovering in
             guard isCurrentMonth else { return }
             isHovered = hovering
-            if hovering && hasVideo {
-                if thumbnail == nil, let url = VideoRecorder.shared.getVideoURL(for: date) {
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let thumb = VideoRecorder.shared.generateThumbnail(for: url)
-                        DispatchQueue.main.async {
-                            self.thumbnail = thumb
+            if hovering {
+                // Get the video URL on the main actor
+                Task { @MainActor in
+                    let url = VideoRecorder.shared.getVideoURL(for: date)
+                    if let url = url {
+                        // Start timer for live preview
+                        livePreviewTimer?.invalidate()
+                        livePreviewTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { _ in
+                            Task { @MainActor in
+                                let player = AVPlayer(url: url)
+                                player.actionAtItemEnd = .none
+                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { _ in
+                                    player.seek(to: .zero)
+                                    player.play()
+                                }
+                                player.isMuted = true
+                                self.player = player
+                                self.showLivePreview = true
+                                self.playerReady = false
+
+                                // Observe when the player is ready
+                                if let item = player.currentItem {
+                                    playerStatusCancellable = item.publisher(for: \.status)
+                                        .receive(on: DispatchQueue.main)
+                                        .sink { status in
+                                            if status == .readyToPlay {
+                                                self.playerReady = true
+                                                // Add a short delay before hiding the thumbnail
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                                    self.hideThumbnail = true
+                                                }
+                                            }
+                                        }
+                                }
+                                player.play()
+                            }
+                        }
+                        // Preload thumbnail if not already loaded
+                        if thumbnail == nil {
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                let thumb = VideoRecorder.shared.generateThumbnail(for: url)
+                                DispatchQueue.main.async {
+                                    self.thumbnail = thumb
+                                }
+                            }
                         }
                     }
                 }
+            } else {
+                livePreviewTimer?.invalidate()
+                livePreviewTimer = nil
+                showLivePreview = false
+                player?.pause()
+                player = nil
             }
         }
         .onTapGesture {
@@ -322,5 +380,23 @@ extension Calendar {
         }
         
         return dates
+    }
+}
+
+import AVKit
+
+struct VideoPreviewPlayer: NSViewRepresentable {
+    let player: AVPlayer
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.player = player
+        view.controlsStyle = .none
+        view.videoGravity = .resizeAspectFill
+        return view
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+        nsView.player = player
     }
 }
