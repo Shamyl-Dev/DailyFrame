@@ -34,6 +34,9 @@ struct RecordingView: View {
     @State private var currentState: RecordingViewState = .initializing
     @State private var player: AVPlayer?
     @State private var showingReRecordConfirmation = false
+    @StateObject private var transcriptionService = TranscriptionService()
+    @State private var isTranscribing = false
+    @State private var transcriptError: String?
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -237,7 +240,6 @@ struct RecordingView: View {
     private func playbackContent(videoURL: URL) -> some View {
         Group {
             if let player = player {
-                // 🔧 SOLUTION: Simple VideoPlayer with solid background - no nested blur layers
                 VideoPlayer(player: player)
                     .background(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -247,15 +249,56 @@ struct RecordingView: View {
                         .progressViewStyle(CircularProgressViewStyle())
                         .scaleEffect(1.2)
                         .tint(.white)
-                    
                     Text("Loading video...")
                         .foregroundStyle(.white)
                         .font(.subheadline)
                 }
             }
+            // Transcript UI below the video
+            transcriptSection
+        }
+        .onAppear {
+            // Safe to mutate state here!
+            if let entry = existingEntry, let transcript = entry.transcription {
+                transcriptionService.transcript = transcript
+            }
+            triggerTranscriptionIfNeeded(for: videoURL)
         }
     }
-    
+
+        private var transcriptSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if isTranscribing {
+                HStack {
+                    ProgressView()
+                    Text("Transcribing...")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 12)
+            } else if let error = transcriptError {
+                Text("Transcription failed: \(error)")
+                    .foregroundStyle(.red)
+                    .padding(.top, 12)
+            } else if !transcriptionService.transcript.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Transcript")
+                        .font(.headline)
+                        .padding(.bottom, 2)
+                    ScrollView {
+                        Text(transcriptionService.transcript)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .padding(8)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .frame(maxHeight: 180)
+                }
+                .padding(.top, 12)
+            }
+        }
+    }
+
     private var cameraPlaceholder: some View {
         VStack(spacing: 16) {
             Image(systemName: videoRecorder.hasPermission ? "video.fill" : "video.slash.fill")
@@ -544,7 +587,7 @@ struct RecordingView: View {
             if videoRecorder.isRecording {
                 if let videoURL = await videoRecorder.stopRecording() {
                     await saveEntry(videoURL: videoURL)
-                    // Transition to playback after recording
+                    triggerTranscriptionIfNeeded(for: videoURL)
                     await MainActor.run {
                         transitionToPlayback(videoURL: videoURL)
                     }
@@ -575,6 +618,35 @@ struct RecordingView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    private func triggerTranscriptionIfNeeded(for videoURL: URL) {
+        // Find or create the entry for this date
+        let entry = existingEntry ?? DiaryEntry(date: selectedDate)
+        
+        // Only transcribe if not already saved
+        guard (entry.transcription?.isEmpty ?? true), !isTranscribing else {
+            // Load the saved transcript into the UI
+            transcriptionService.transcript = entry.transcription ?? ""
+            return
+        }
+        
+        isTranscribing = true
+        transcriptError = nil
+        Task {
+            do {
+                let text = try await transcriptionService.transcribeVideo(url: videoURL)
+                transcriptionService.transcript = text
+                entry.transcription = text
+                if existingEntry == nil {
+                    modelContext.insert(entry)
+                }
+                try? modelContext.save()
+            } catch {
+                transcriptError = error.localizedDescription
+            }
+            isTranscribing = false
+        }
     }
 }
 

@@ -222,11 +222,6 @@ struct DayCell: View {
                     }
                 }
                 Spacer()
-                if entry != nil {
-                    Circle()
-                        .fill(.blue)
-                        .frame(width: 6, height: 6)
-                }
             }
             .padding(8)
             .zIndex(1)
