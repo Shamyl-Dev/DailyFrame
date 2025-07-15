@@ -48,53 +48,46 @@ struct RecordingView: View {
     
     var body: some View {
         ZStack {
-            // 🔧 REMOVE: Don't block the parent blur with black background
-            // Color.black.opacity(0.9)
-            //     .ignoresSafeArea()
-            
-            // 🔧 SOLUTION: Let ContentView's blur show through
-            Color.clear
-                .ignoresSafeArea()
-            
-            VStack(spacing: 12) {
-                // Header (stays consistent across all states)
+            Color.clear.ignoresSafeArea()
+            VStack(spacing: 0) {
+                // Header always visible
                 headerView
-                
-                // Date display (stays consistent)
-                VStack(spacing: 4) {
-                    Text(dateFormatter.string(from: selectedDate))
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                    
-                    Text(stateSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+
+                // Scrollable main content
+                ScrollView {
+                    VStack(spacing: 12) {
+                        // Date display (stays consistent)
+                        VStack(spacing: 4) {
+                            Text(dateFormatter.string(from: selectedDate))
+                                .font(.title2)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+                            Text(stateSubtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        // Main content area (swaps based on state)
+                        mainContentArea
+
+                        // Controls (adapts based on state)
+                        controlsView
+
+                        // 👇 Transcript section goes here!
+                        transcriptSection
+
+                        Spacer(minLength: 12)
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.top, 8)
+                    .padding(.bottom, 40)
                 }
-                
-                // Main content area (swaps based on state)
-                mainContentArea
-                
-                // Controls (adapts based on state)
-                controlsView
-                
-                Spacer(minLength: 12)
             }
-            .padding(.horizontal, 40)
-            .padding(.top, 8)
-            .padding(.bottom, 40)
         }
-        .onAppear {
-            initializeView()  // 🔧 CHANGED: Use existing method name
-        }
-        .onDisappear {
-            cleanupView()
-        }
+        .onAppear { initializeView() }
+        .onDisappear { cleanupView() }
         .onKeyDown { keyCode in
-            if keyCode == 53 { // Escape key
-                isPresented = false
-                return true
-            }
+            if keyCode == 53 { isPresented = false; return true }
             return false
         }
         .alert("Re-record Video", isPresented: $showingReRecordConfirmation) {
@@ -153,6 +146,7 @@ struct RecordingView: View {
                 .font(.headline)
                 .fontWeight(.medium)
         }
+        .padding(.horizontal, 24) // 👈 Add this line for left/right padding
         .padding(.top, 4)
     }
     
@@ -254,11 +248,8 @@ struct RecordingView: View {
                         .font(.subheadline)
                 }
             }
-            // Transcript UI below the video
-            transcriptSection
         }
         .onAppear {
-            // Safe to mutate state here!
             if let entry = existingEntry, let transcript = entry.transcription {
                 transcriptionService.transcript = transcript
             }
