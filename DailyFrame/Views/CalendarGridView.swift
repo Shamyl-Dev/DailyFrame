@@ -2,6 +2,9 @@ import SwiftUI
 import SwiftData
 import AVKit
 import Combine
+import AppKit
+
+extension NSImage: @unchecked Sendable {}
 
 struct CalendarGridView: View {
     @Query private var entries: [DiaryEntry]

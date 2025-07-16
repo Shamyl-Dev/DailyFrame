@@ -130,6 +130,8 @@ class VideoRecorder: NSObject, ObservableObject {
         }
         
         await withCheckedContinuation { continuation in
+            // Capture self for use in the closure
+            let mainActorSelf = self
             sessionQueue.async {
                 let session = AVCaptureSession()
                 session.beginConfiguration()
@@ -255,15 +257,18 @@ class VideoRecorder: NSObject, ObservableObject {
                 print("📹 Session configuration committed")
                 
                 Task { @MainActor in
-                    self.captureSession = session
-                    self.videoDeviceInput = videoDeviceInput
-                    self.audioDeviceInput = audioDeviceInput
+                    // Use mainActorSelf instead of self for all main actor properties
+                    // (But in this method, you are creating a new session, so this is fine)
+                    // If you need to access main actor properties, do it outside the closure.
+                    mainActorSelf.captureSession = session
+                    mainActorSelf.videoDeviceInput = videoDeviceInput
+                    mainActorSelf.audioDeviceInput = audioDeviceInput
                     
                     let previewLayer = AVCaptureVideoPreviewLayer(session: session)
                     previewLayer.videoGravity = .resizeAspectFill
-                    self.previewLayer = previewLayer
-                    self.errorMessage = nil
-                    self.isSessionConfigured = true
+                    mainActorSelf.previewLayer = previewLayer
+                    mainActorSelf.errorMessage = nil
+                    mainActorSelf.isSessionConfigured = true
                     
                     print("📹 Capture session configured (but not started)")
                     
@@ -302,10 +307,12 @@ class VideoRecorder: NSObject, ObservableObject {
         
         guard shouldStart else { return }
         
+        let session = await MainActor.run { self.captureSession }
         // Use sessionQueue consistently for all session operations
         await withCheckedContinuation { continuation in
             sessionQueue.async {
-                guard let session = self.captureSession else {
+                // Capture the session reference on the main actor
+                guard let session = session else {
                     Task { @MainActor in
                         self.isSessionStarting = false
                     }
@@ -346,29 +353,27 @@ class VideoRecorder: NSObject, ObservableObject {
         
         guard shouldStop else { return }
         
+        let session = await MainActor.run { self.captureSession }
         // Use sessionQueue consistently
         await withCheckedContinuation { continuation in
             sessionQueue.async {
-                guard let session = self.captureSession else {
+                // Capture the session reference on the main actor
+                guard let session = session else {
                     Task { @MainActor in
                         self.isSessionStopping = false
                     }
                     continuation.resume()
                     return
                 }
-                
                 print("🛑 Stopping capture session...")
-                
                 if session.isRunning {
                     session.stopRunning()
                     print("🛑 Capture session stopped")
                 }
-                
                 Task { @MainActor in
                     self.isSessionActive = false
                     self.isSessionStopping = false
                 }
-                
                 continuation.resume()
             }
         }
