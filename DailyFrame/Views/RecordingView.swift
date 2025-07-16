@@ -480,14 +480,16 @@ struct RecordingView: View {
     private func cleanupView() {
         print("📹 RecordingView disappeared - cleaning up resources")
         
-        // 🔧 OPTIMIZED: Proper video player cleanup
+        // Proper video player cleanup
         if let existingPlayer = player {
             existingPlayer.pause()
             existingPlayer.replaceCurrentItem(with: nil)
             player = nil
         }
+        // Remove any NotificationCenter observers if you added any
+        NotificationCenter.default.removeObserver(self)
         
-        // 🔧 OPTIMIZED: Always stop session when leaving view to save resources
+        // Always stop session when leaving view to save resources
         Task {
             await videoRecorder.stopSession()
         }
@@ -526,23 +528,27 @@ struct RecordingView: View {
         if case .playback(let videoURL) = currentState {
             try? FileManager.default.removeItem(at: videoURL)
         }
-        
+
         // Clean up player
         player?.pause()
         player = nil
-        
+
+        // Clear transcript and error
+        transcriptionService.transcript = ""
+        transcriptError = nil
+
         // Transition back to recording mode
         withAnimation(.easeInOut(duration: 0.3)) {
             currentState = .initializing
         }
-        
+
         // Reinitialize camera
         Task {
             await videoRecorder.initializeCamera()
             await videoRecorder.startSession()
-            
+
             try? await Task.sleep(for: .milliseconds(200))
-            
+
             await MainActor.run {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentState = .recording
@@ -558,7 +564,7 @@ struct RecordingView: View {
             if videoRecorder.isRecording {
                 if let videoURL = await videoRecorder.stopRecording() {
                     await saveEntry(videoURL: videoURL)
-                    triggerTranscriptionIfNeeded(for: videoURL)
+                    triggerTranscriptionIfNeeded(for: videoURL, force: true)
                     await MainActor.run {
                         transitionToPlayback(videoURL: videoURL)
                     }
@@ -591,17 +597,13 @@ struct RecordingView: View {
         return String(format: "%d:%02d", minutes, seconds)
     }
     
-    private func triggerTranscriptionIfNeeded(for videoURL: URL) {
-        // Find or create the entry for this date
+    private func triggerTranscriptionIfNeeded(for videoURL: URL, force: Bool = false) {
         let entry = existingEntry ?? DiaryEntry(date: selectedDate)
-        
-        // Only transcribe if not already saved
-        guard (entry.transcription?.isEmpty ?? true), !isTranscribing else {
-            // Load the saved transcript into the UI
+        // Only skip if not forced and already has a transcript
+        guard force || (entry.transcription?.isEmpty ?? true), !isTranscribing else {
             transcriptionService.transcript = entry.transcription ?? ""
             return
         }
-        
         isTranscribing = true
         transcriptError = nil
         Task {

@@ -11,6 +11,10 @@ class TranscriptionService: ObservableObject {
     func transcribeVideo(url: URL) async throws -> String {
         // 1. Extract audio from video
         let audioURL = try await extractAudio(from: url)
+        defer {
+            // Delete the temp audio file after transcription attempt
+            try? FileManager.default.removeItem(at: audioURL)
+        }
         // 2. Request permission
         let authStatus = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
@@ -28,6 +32,7 @@ class TranscriptionService: ObservableObject {
                 if let result = result, result.isFinal {
                     continuation.resume(returning: result.bestTranscription.formattedString)
                 } else if let error = error {
+                    self.cancelRecognition() // Ensure cleanup
                     continuation.resume(throwing: error)
                 }
             }
@@ -36,6 +41,11 @@ class TranscriptionService: ObservableObject {
 
     private func extractAudio(from videoURL: URL) async throws -> URL {
         let asset = AVAsset(url: videoURL)
+        // Check for audio track
+        let hasAudio = asset.tracks(withMediaType: .audio).count > 0
+        if !hasAudio {
+            throw NSError(domain: "Export", code: 3, userInfo: [NSLocalizedDescriptionKey: "No audio track found in video"])
+        }
         let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".m4a")
         guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
             throw NSError(domain: "Export", code: 1, userInfo: nil)
