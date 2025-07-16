@@ -186,6 +186,7 @@ struct DayCell: View {
     @State private var player: AVPlayer?
     @State private var playerReady = false
     @State private var playerStatusCancellable: AnyCancellable?
+    @State private var endObserver: NSObjectProtocol? // 1. Add a property to store the observer token
     @State private var hideThumbnail = false
 
     private let dayFormatter: DateFormatter = {
@@ -282,7 +283,12 @@ struct DayCell: View {
                             Task { @MainActor in
                                 let player = AVPlayer(url: url)
                                 player.actionAtItemEnd = .none
-                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main) { _ in
+                                // 2. When adding the observer, store the token:
+                                endObserver = NotificationCenter.default.addObserver(
+                                    forName: .AVPlayerItemDidPlayToEndTime,
+                                    object: player.currentItem,
+                                    queue: .main
+                                ) { _ in
                                     player.seek(to: .zero)
                                     player.play()
                                 }
@@ -327,6 +333,11 @@ struct DayCell: View {
                 player = nil
                 playerStatusCancellable?.cancel() // 👈 Add this line
                 playerStatusCancellable = nil
+                // 3. When hover ends (in your cleanup code), remove the observer:
+                if let endObserver = endObserver {
+                    NotificationCenter.default.removeObserver(endObserver)
+                    self.endObserver = nil
+                }
             }
         }
         .onTapGesture {
