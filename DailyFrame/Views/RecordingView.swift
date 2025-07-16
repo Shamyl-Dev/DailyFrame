@@ -53,7 +53,7 @@ struct RecordingView: View {
             VStack(spacing: 0) {
                 // Header always visible
                 headerView
-                Divider() // 👈 Add this line
+                Divider() // 👈 Divider below header
 
                 // Scrollable main content
                 ScrollView {
@@ -68,6 +68,7 @@ struct RecordingView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        .padding(.top, 12) // 👈 Add or increase this value for more space below the divider
 
                         // Main content area (swaps based on state)
                         mainContentArea
