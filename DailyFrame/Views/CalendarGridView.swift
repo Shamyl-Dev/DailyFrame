@@ -218,6 +218,12 @@ struct DayCell: View {
                     Text(dayFormatter.string(from: date))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(dayTextColor)
+                    // Mood dot right next to the day number
+                    if let mood = entry?.mood {
+                        Circle()
+                            .fill(mood == "Positive" ? .green : (mood == "Negative" ? .red : .yellow))
+                            .frame(width: 8, height: 8)
+                    }
                     Spacer()
                     if hasVideo {
                         Image(systemName: "play.circle.fill")

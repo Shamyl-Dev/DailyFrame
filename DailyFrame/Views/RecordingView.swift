@@ -638,6 +638,13 @@ struct RecordingView: View {
                     if isTranscribing {
                         transcriptionService.transcript = text
                         entry.transcription = text
+
+                        // Analyze mood and save
+                        let moodResult = AIAnalysisService.shared.analyzeSentiment(text: text)
+                        entry.mood = moodResult.label
+
+                        print("Sentiment score: \(moodResult.score), label: \(moodResult.label)")
+
                         if existingEntry == nil {
                             modelContext.insert(entry)
                         }

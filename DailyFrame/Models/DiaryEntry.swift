@@ -8,6 +8,7 @@ final class DiaryEntry {
     var transcription: String?
     var thumbnailData: Data?
     var duration: TimeInterval?
+    var mood: String? // 👈 Add this line
     
     init(date: Date) {
         self.date = date
@@ -15,5 +16,6 @@ final class DiaryEntry {
         self.transcription = nil
         self.thumbnailData = nil
         self.duration = nil
+        self.mood = nil // 👈 Add this line
     }
 }
