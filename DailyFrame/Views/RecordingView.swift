@@ -38,6 +38,7 @@ struct RecordingView: View {
     @State private var isTranscribing = false
     @State private var transcriptError: String?
     @State private var transcriptionTask: Task<Void, Never>?
+    @State private var showTranscriptSection = false
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -77,7 +78,10 @@ struct RecordingView: View {
                         controlsView
 
                         // 👇 Transcript section goes here!
-                        transcriptSection
+                        if showTranscriptSection {
+                            transcriptSection
+                                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                        }
 
                         Spacer(minLength: 12)
                     }
@@ -87,7 +91,15 @@ struct RecordingView: View {
                 }
             }
         }
-        .onAppear { initializeView() }
+        .onAppear {
+            initializeView()
+            // Fade in transcript section after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                withAnimation(.easeInOut(duration: 0.5)) { // 👈 Slower, more apparent
+                    showTranscriptSection = true
+                }
+            }
+        }
         .onDisappear { cleanupView() }
         .onKeyDown { keyCode in
             if keyCode == 53 { isPresented = false; return true }
@@ -263,8 +275,11 @@ struct RecordingView: View {
         }
     }
 
-        private var transcriptSection: some View {
+    private var transcriptSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text("Transcript")
+                .font(.headline)
+                .padding(.bottom, 2)
             if isTranscribing {
                 HStack {
                     ProgressView()
@@ -272,28 +287,39 @@ struct RecordingView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 12)
+            } else if let error = transcriptError,
+                      error.localizedCaseInsensitiveContains("no speech detected") ||
+                      error.localizedCaseInsensitiveContains("no audio track found") {
+                Text("No words detected in this video.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .padding(8)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .frame(maxWidth: .infinity, alignment: .leading) // 👈 Ensure left alignment
+                    .multilineTextAlignment(.leading)
             } else if let error = transcriptError {
                 Text("Transcription failed: \(error)")
                     .foregroundStyle(.red)
                     .padding(.top, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
             } else if !transcriptionService.transcript.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Transcript")
-                        .font(.headline)
-                        .padding(.bottom, 2)
-                    ScrollView {
-                        Text(transcriptionService.transcript)
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                            .padding(8)
-                            .background(.quaternary)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .frame(maxHeight: 180)
+                ScrollView {
+                    Text(transcriptionService.transcript)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .padding(8)
+                        .background(.quaternary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .frame(maxWidth: .infinity, alignment: .leading) // 👈 Ensure left alignment
+                        .multilineTextAlignment(.leading)
                 }
-                .padding(.top, 12)
+                .frame(maxHeight: 180)
             }
         }
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, alignment: .leading) // 👈 Outer VStack left aligned
     }
 
     private var cameraPlaceholder: some View {
