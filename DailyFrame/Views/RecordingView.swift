@@ -52,6 +52,7 @@ struct RecordingView: View {
             VStack(spacing: 0) {
                 // Header always visible
                 headerView
+                Divider() // 👈 Add this line
 
                 // Scrollable main content
                 ScrollView {
@@ -146,8 +147,8 @@ struct RecordingView: View {
                 .font(.headline)
                 .fontWeight(.medium)
         }
-        .padding(.horizontal, 24) // 👈 Add this line for left/right padding
-        .padding(.top, 4)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)   // Add bottom padding for better vertical centering
     }
     
     private var mainContentArea: some View {
@@ -194,11 +195,12 @@ struct RecordingView: View {
     
     private var recordingContent: some View {
         ZStack {
-            // Camera preview or placeholder
             if videoRecorder.hasPermission, let previewLayer = videoRecorder.previewLayer {
                 CameraPreviewView(previewLayer: previewLayer)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
             } else {
                 cameraPlaceholder
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
             }
             
             // Recording indicator overlay
@@ -237,6 +239,7 @@ struct RecordingView: View {
                 VideoPlayer(player: player)
                     .background(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
             } else {
                 VStack(spacing: 16) {
                     ProgressView()
@@ -247,6 +250,7 @@ struct RecordingView: View {
                         .foregroundStyle(.white)
                         .font(.subheadline)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
             }
         }
         .onAppear {
@@ -425,33 +429,7 @@ struct RecordingView: View {
     }
     
     private var commonControls: some View {
-        VStack(spacing: 12) {
-            // Show Videos Button (only when not recording)
-            if !videoRecorder.isRecording {
-                Button(action: {
-                    videoRecorder.showVideosInFinder()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 12))
-                        Text("Show Videos")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .transition(.opacity)
-            }
-            
-            // Status text
-            Text(statusText)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .transition(.opacity)
-        }
+        EmptyView()
     }
     
     private var statusText: String {
@@ -513,6 +491,8 @@ struct RecordingView: View {
         Task {
             await videoRecorder.stopSession()
         }
+        
+        transcriptionService.cancelRecognition()
     }
     
     // 🔧 OPTIMIZED: Improved playback transition with proper cleanup

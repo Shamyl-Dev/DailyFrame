@@ -325,6 +325,8 @@ struct DayCell: View {
                 showLivePreview = false
                 player?.pause()
                 player = nil
+                playerStatusCancellable?.cancel() // 👈 Add this line
+                playerStatusCancellable = nil
             }
         }
         .onTapGesture {

@@ -54,4 +54,9 @@ class TranscriptionService: ObservableObject {
             throw exporter.error ?? NSError(domain: "Export", code: 2, userInfo: nil)
         }
     }
+
+    func cancelRecognition() {
+        recognitionTask?.cancel()
+        recognitionTask = nil
+    }
 }
