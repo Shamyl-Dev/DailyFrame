@@ -28,10 +28,14 @@ class TranscriptionService: ObservableObject {
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         // 4. Perform recognition
         return try await withCheckedThrowingContinuation { continuation in
+            var didResume = false
             self.recognitionTask = recognizer?.recognitionTask(with: request) { result, error in
+                if didResume { return }
                 if let result = result, result.isFinal {
+                    didResume = true
                     continuation.resume(returning: result.bestTranscription.formattedString)
                 } else if let error = error {
+                    didResume = true
                     self.cancelRecognition() // Ensure cleanup
                     continuation.resume(throwing: error)
                 }
@@ -40,9 +44,10 @@ class TranscriptionService: ObservableObject {
     }
 
     private func extractAudio(from videoURL: URL) async throws -> URL {
-        let asset = AVAsset(url: videoURL)
-        // Check for audio track
-        let hasAudio = asset.tracks(withMediaType: .audio).count > 0
+        let asset = AVURLAsset(url: videoURL) // 1. Use AVURLAsset instead of AVAsset(url:)
+        // 2. Use loadTracks(withMediaType:) async
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let hasAudio = !audioTracks.isEmpty
         if !hasAudio {
             throw NSError(domain: "Export", code: 3, userInfo: [NSLocalizedDescriptionKey: "No audio track found in video"])
         }
@@ -52,17 +57,13 @@ class TranscriptionService: ObservableObject {
         }
         exporter.outputURL = outputURL
         exporter.outputFileType = .m4a
-        exporter.timeRange = CMTimeRange(start: .zero, duration: asset.duration)
-        await withCheckedContinuation { cont in
-            exporter.exportAsynchronously {
-                cont.resume()
-            }
-        }
-        if exporter.status == .completed {
-            return outputURL
-        } else {
-            throw exporter.error ?? NSError(domain: "Export", code: 2, userInfo: nil)
-        }
+        // 3. Use load(.duration) async
+        let duration = try await asset.load(.duration)
+        exporter.timeRange = CMTimeRange(start: .zero, duration: duration)
+        // 4. Use export(to:as:) async throws instead of exportAsynchronously
+        try await exporter.export(to: outputURL, as: .m4a)
+        // 5. No need to check status or error, just return outputURL if no error thrown
+        return outputURL
     }
 
     func cancelRecognition() {

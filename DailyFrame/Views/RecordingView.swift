@@ -37,6 +37,7 @@ struct RecordingView: View {
     @StateObject private var transcriptionService = TranscriptionService()
     @State private var isTranscribing = false
     @State private var transcriptError: String?
+    @State private var transcriptionTask: Task<Void, Never>?
     
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -479,47 +480,43 @@ struct RecordingView: View {
     // 🔧 OPTIMIZED: Proper cleanup with memory management
     private func cleanupView() {
         print("📹 RecordingView disappeared - cleaning up resources")
-        
-        // Proper video player cleanup
         if let existingPlayer = player {
             existingPlayer.pause()
             existingPlayer.replaceCurrentItem(with: nil)
             player = nil
         }
-        // Remove any NotificationCenter observers if you added any
         NotificationCenter.default.removeObserver(self)
-        
-        // Always stop session when leaving view to save resources
         Task {
             await videoRecorder.stopSession()
         }
-        
         transcriptionService.cancelRecognition()
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
     }
     
     // 🔧 OPTIMIZED: Improved playback transition with proper cleanup
     private func transitionToPlayback(videoURL: URL) {
-        // 🔧 OPTIMIZED: Clean up existing player first
+        // Clean up existing player first
         if let existingPlayer = player {
             existingPlayer.pause()
             existingPlayer.replaceCurrentItem(with: nil)
             player = nil
         }
-        
+
         withAnimation(.easeInOut(duration: 0.15)) {
             currentState = .playback(videoURL)
         }
-        
-        // 🔧 OPTIMIZED: Setup video player with proper resource management
-        Task {
-            let newPlayer = AVPlayer(url: videoURL)
-            await MainActor.run {
-                self.player = newPlayer
-                newPlayer.play()
+
+        // Delay playback until animation finishes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) {
+            Task {
+                let newPlayer = AVPlayer(url: videoURL)
+                await MainActor.run {
+                    self.player = newPlayer
+                    newPlayer.play()
+                }
+                await videoRecorder.stopSession()
             }
-            
-            // Stop camera session to free resources
-            await videoRecorder.stopSession()
         }
     }
     
@@ -599,26 +596,36 @@ struct RecordingView: View {
     
     private func triggerTranscriptionIfNeeded(for videoURL: URL, force: Bool = false) {
         let entry = existingEntry ?? DiaryEntry(date: selectedDate)
-        // Only skip if not forced and already has a transcript
         guard force || (entry.transcription?.isEmpty ?? true), !isTranscribing else {
             transcriptionService.transcript = entry.transcription ?? ""
             return
         }
         isTranscribing = true
         transcriptError = nil
-        Task {
+        transcriptionTask?.cancel() // Cancel any previous task
+        transcriptionTask = Task {
             do {
                 let text = try await transcriptionService.transcribeVideo(url: videoURL)
-                transcriptionService.transcript = text
-                entry.transcription = text
-                if existingEntry == nil {
-                    modelContext.insert(entry)
+                await MainActor.run {
+                    // Only update if still transcribing
+                    if isTranscribing {
+                        transcriptionService.transcript = text
+                        entry.transcription = text
+                        if existingEntry == nil {
+                            modelContext.insert(entry)
+                        }
+                        try? modelContext.save()
+                        isTranscribing = false
+                    }
                 }
-                try? modelContext.save()
             } catch {
-                transcriptError = error.localizedDescription
+                await MainActor.run {
+                    if isTranscribing {
+                        transcriptError = error.localizedDescription
+                        isTranscribing = false
+                    }
+                }
             }
-            isTranscribing = false
         }
     }
 }
