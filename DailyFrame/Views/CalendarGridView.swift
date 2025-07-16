@@ -316,34 +316,43 @@ struct DayCell: View {
                         }
                         // Preload thumbnail if not already loaded
                         if thumbnail == nil {
-                            DispatchQueue.global(qos: .userInitiated).async {
-                                let thumb = VideoRecorder.shared.generateThumbnail(for: url)
-                                DispatchQueue.main.async {
-                                    self.thumbnail = thumb
+                            Task {
+                                if let thumb = try? await VideoRecorder.shared.generateThumbnail(for: url) {
+                                    await MainActor.run { self.thumbnail = thumb }
                                 }
                             }
                         }
                     }
                 }
             } else {
-                livePreviewTimer?.invalidate()
-                livePreviewTimer = nil
-                showLivePreview = false
-                player?.pause()
-                player = nil
-                playerStatusCancellable?.cancel() // 👈 Add this line
-                playerStatusCancellable = nil
-                // 3. When hover ends (in your cleanup code), remove the observer:
-                if let endObserver = endObserver {
-                    NotificationCenter.default.removeObserver(endObserver)
-                    self.endObserver = nil
-                }
+                cleanupDayCellResources()
             }
+        }
+        .onDisappear {
+            cleanupDayCellResources()
         }
         .onTapGesture {
             onTap()
         }
         .opacity(isCurrentMonth ? 1.0 : 0.3)
+    }
+
+    private func cleanupDayCellResources() {
+        livePreviewTimer?.invalidate()
+        livePreviewTimer = nil
+        showLivePreview = false
+        player?.pause()
+        player = nil
+        playerStatusCancellable?.cancel()
+        playerStatusCancellable = nil
+        if let endObserver = endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
+        // Optionally clear thumbnail if you want to free memory aggressively:
+        // thumbnail = nil
+        hideThumbnail = false
+        playerReady = false
     }
 
     // Color helpers (if not already present)
