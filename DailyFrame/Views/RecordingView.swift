@@ -78,7 +78,7 @@ struct RecordingView: View {
                         controlsView
 
                         // 👇 Transcript section goes here!
-                        if showTranscriptSection {
+                        if showTranscriptSection, case .playback = currentState {
                             transcriptSection
                                 .transition(.opacity.combined(with: .scale(scale: 0.85)))
                         }
@@ -174,8 +174,7 @@ struct RecordingView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .strokeBorder(.quaternary.opacity(0.3), lineWidth: 1)
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .frame(minHeight: 420)
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Remove minHeight constraint
             
             // Content based on current state
             Group {
@@ -191,6 +190,7 @@ struct RecordingView: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
+        .frame(minHeight: 400, maxHeight: .infinity) // 👈 Move frame constraint here with higher minHeight
         .compositingGroup() // Keep this to isolate video rendering
     }
     
@@ -211,27 +211,25 @@ struct RecordingView: View {
         ZStack {
             if videoRecorder.hasPermission, let previewLayer = videoRecorder.previewLayer {
                 CameraPreviewView(previewLayer: previewLayer)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
+                    .background(Color.black)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 cameraPlaceholder
-                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 👈 Add this line
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            
-            // Recording indicator overlay
+
+            // Recording indicator overlay (unchanged)
             if videoRecorder.isRecording {
                 VStack {
                     HStack {
                         Circle()
                             .fill(.red)
                             .frame(width: 8, height: 8)
-                        
                         Text("REC")
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundStyle(.red)
-                        
                         Spacer()
-                        
                         Text(formatDuration(videoRecorder.recordingDuration))
                             .font(.caption)
                             .fontWeight(.medium)
@@ -239,7 +237,6 @@ struct RecordingView: View {
                     }
                     .padding(12)
                     .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 8))
-                    
                     Spacer()
                 }
                 .padding(20)
@@ -296,7 +293,7 @@ struct RecordingView: View {
                     .padding(8)
                     .background(.quaternary)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .frame(maxWidth: .infinity, alignment: .leading) // 👈 Ensure left alignment
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
             } else if let error = transcriptError {
                 Text("Transcription failed: \(error)")
@@ -305,21 +302,19 @@ struct RecordingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
             } else if !transcriptionService.transcript.isEmpty {
-                ScrollView {
-                    Text(transcriptionService.transcript)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .padding(8)
-                        .background(.quaternary)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .frame(maxWidth: .infinity, alignment: .leading) // 👈 Ensure left alignment
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxHeight: 180)
+                // 👇 REMOVE THE INNER SCROLLVIEW, just show the text
+                Text(transcriptionService.transcript)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .padding(8)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
             }
         }
         .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading) // 👈 Outer VStack left aligned
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var cameraPlaceholder: some View {
