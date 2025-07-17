@@ -214,22 +214,25 @@ struct DayCell: View {
                 )
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(dayFormatter.string(from: date))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(dayTextColor)
-                    // Mood dot right next to the day number
-                    if let mood = entry?.mood {
-                        Circle()
-                            .fill(mood == "Positive" ? .green : (mood == "Negative" ? .red : .yellow))
-                            .frame(width: 8, height: 8)
+                HStack(alignment: .top) {
+                    VStack(spacing: 2) {
+                        Text(dayFormatter.string(from: date))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(dayTextColor)
+                        if hasVideo {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(
+                                    entry?.mood == "Positive" ? .green :
+                                    entry?.mood == "Negative" ? .red :
+                                    entry?.mood == "Neutral" ? .yellow :
+                                    .blue
+                                )
+                                .opacity(isHovered && hasVideo ? 0 : 1)
+                                .animation(.easeInOut(duration: 0.18), value: isHovered && hasVideo)
+                        }
                     }
                     Spacer()
-                    if hasVideo {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.blue)
-                    }
                 }
                 Spacer()
             }
