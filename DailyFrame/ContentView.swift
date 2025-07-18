@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var showingInsights = false           // 👈 Add this line
     @State private var showingMonthlyInsights = false    // 👈 Add this line
     @State private var sidebarIsClosing = false
+    @State private var appColorScheme: ColorScheme? = .dark
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
     var body: some View {
@@ -82,7 +83,8 @@ struct ContentView: View {
                             sidebarIsClosing = false
                         }
                     },
-                    isClosing: sidebarIsClosing
+                    isClosing: sidebarIsClosing,
+                    appColorScheme: $appColorScheme // 👈 Add this
                 )
                 .frame(width: 260)
                 .background(.ultraThinMaterial)
@@ -99,6 +101,7 @@ struct ContentView: View {
             MonthlyInsightsView()
                 .frame(minWidth: 600, minHeight: 500)
         }
+        .preferredColorScheme(appColorScheme)
     }
     
     private var headerView: some View {
@@ -139,6 +142,7 @@ struct SidebarMenuView: View {
     var showVideos: () -> Void
     var closeSidebar: () -> Void
     var isClosing: Bool
+    @Binding var appColorScheme: ColorScheme?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -177,6 +181,20 @@ struct SidebarMenuView: View {
             .buttonStyle(.plain)
             .font(.headline)
             .allowsHitTesting(!isClosing)
+
+            Divider().padding(.vertical, 8)
+
+            // Theme toggle
+            HStack {
+                Image(systemName: "sun.max.fill")
+                    .foregroundStyle(.secondary)
+                Toggle("Light Mode", isOn: Binding(
+                    get: { appColorScheme == .light },
+                    set: { appColorScheme = $0 ? .light : .dark }
+                ))
+                .toggleStyle(SwitchToggleStyle())
+            }
+            .padding(.top, 8)
 
             Spacer()
         }
