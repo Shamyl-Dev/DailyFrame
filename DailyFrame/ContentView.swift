@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showingSidebar = false
     @State private var showingInsights = false           // 👈 Add this line
     @State private var showingMonthlyInsights = false    // 👈 Add this line
+    @State private var sidebarIsClosing = false
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
     var body: some View {
@@ -64,10 +65,38 @@ struct ContentView: View {
             // Sidebar overlay
             if showingSidebar {
                 SidebarMenuView(
-                    showWeeklyInsights: { showingInsights = true; showingSidebar = false },
-                    showMonthlyInsights: { showingMonthlyInsights = true; showingSidebar = false },
-                    showVideos: { sharedVideoRecorder.showVideosInFinder(); showingSidebar = false },
-                    closeSidebar: { showingSidebar = false }   // 👈 Add this
+                    showWeeklyInsights: {
+                        sidebarIsClosing = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                            showingInsights = true
+                            showingSidebar = false
+                            sidebarIsClosing = false
+                        }
+                    },
+                    showMonthlyInsights: {
+                        sidebarIsClosing = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                            showingMonthlyInsights = true
+                            showingSidebar = false
+                            sidebarIsClosing = false
+                        }
+                    },
+                    showVideos: {
+                        sidebarIsClosing = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                            sharedVideoRecorder.showVideosInFinder()
+                            showingSidebar = false
+                            sidebarIsClosing = false
+                        }
+                    },
+                    closeSidebar: {
+                        sidebarIsClosing = true
+                        DispatchQueue.main.asyncAfter(deadline: .now()) {
+                            showingSidebar = false
+                            sidebarIsClosing = false
+                        }
+                    },
+                    isClosing: sidebarIsClosing
                 )
                 .frame(width: 260)
                 .background(.ultraThinMaterial)
@@ -76,6 +105,14 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: showingSidebar)
+        .sheet(isPresented: $showingInsights) {
+            InsightsView()
+                .frame(minWidth: 600, minHeight: 500)
+        }
+        .sheet(isPresented: $showingMonthlyInsights) {
+            MonthlyInsightsView()
+                .frame(minWidth: 600, minHeight: 500)
+        }
     }
     
     private var headerView: some View {
@@ -143,7 +180,8 @@ struct SidebarMenuView: View {
     var showWeeklyInsights: () -> Void
     var showMonthlyInsights: () -> Void
     var showVideos: () -> Void
-    var closeSidebar: () -> Void    // 👈 Add this
+    var closeSidebar: () -> Void
+    var isClosing: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -152,12 +190,13 @@ struct SidebarMenuView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
-                Button(action: closeSidebar) {   // 👈 Use this
+                Button(action: closeSidebar) {
                     Image(systemName: "xmark")
                         .font(.headline)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .allowsHitTesting(!isClosing)
             }
             .padding(.bottom, 8)
 
@@ -166,18 +205,21 @@ struct SidebarMenuView: View {
             }
             .buttonStyle(.plain)
             .font(.headline)
+            .allowsHitTesting(!isClosing)
 
             Button(action: showMonthlyInsights) {
                 Label("Monthly Insights", systemImage: "calendar")
             }
             .buttonStyle(.plain)
             .font(.headline)
+            .allowsHitTesting(!isClosing)
 
             Button(action: showVideos) {
                 Label("Videos", systemImage: "film")
             }
             .buttonStyle(.plain)
             .font(.headline)
+            .allowsHitTesting(!isClosing)
 
             Spacer()
         }
