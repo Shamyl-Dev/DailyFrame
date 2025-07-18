@@ -218,11 +218,13 @@ struct InsightsView: View {
                 selectedWeekIndex = 0 // fallback
             }
         }
-        .onChange(of: weeklyInsights.count) { _ in
+        .onChange(of: weeklyInsights.count) { oldValue, newValue in
             selectedWeekIndex = 0
         }
-        .onChange(of: selectedWeekIndex) { newIndex in }
-        .onChange(of: entries) { _ in
+        .onChange(of: selectedWeekIndex) { oldValue, newValue in
+            // If you need to react to the change, do it here
+        }
+        .onChange(of: entries) { oldValue, newValue in
             // Re-select the current week if it exists, otherwise fallback to 0
             let calendar = Calendar.current
             let now = Date()
