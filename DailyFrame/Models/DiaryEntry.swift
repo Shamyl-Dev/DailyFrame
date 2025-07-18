@@ -2,8 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class DiaryEntry: Identifiable {
-    var id: UUID = UUID()
+final class DiaryEntry {
     var date: Date
     var videoURL: URL?
     var transcription: String?
