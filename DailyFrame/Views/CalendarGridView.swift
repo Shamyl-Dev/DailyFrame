@@ -14,6 +14,9 @@ struct CalendarGridView: View {
     @Binding var showingRecordingView: Bool
     let sharedVideoRecorder: VideoRecorder
     
+    // Add this state variable at the top of CalendarGridView
+    @State private var showingInsights = false
+    
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -81,6 +84,23 @@ struct CalendarGridView: View {
             
             Spacer()
             
+            // Add insights button
+            Button(action: {
+                showingInsights = true
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 12))
+                    Text("Insights")
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            
             Button(action: nextMonth) {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.secondary)
@@ -89,6 +109,10 @@ struct CalendarGridView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
+        .sheet(isPresented: $showingInsights) {
+            InsightsView()
+                .frame(minWidth: 600, minHeight: 500)
+        }
     }
     
     private var weekdayHeader: some View {
