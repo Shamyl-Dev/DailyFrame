@@ -313,22 +313,6 @@ struct RecordingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
-                
-                // 👇 Add sentiment score display here
-                let sentiment = AIAnalysisService.shared.analyzeSentiment(text: transcriptionService.transcript)
-                HStack(spacing: 8) {
-                    Text("Sentiment Score: \(String(format: "%.2f", sentiment.score))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text("(\(sentiment.label))")
-                        .font(.caption2)
-                        .foregroundStyle(
-                            sentiment.label == "Positive" ? .green :
-                            sentiment.label == "Negative" ? .red :
-                            .yellow
-                        )
-                }
-                .padding(.leading, 4)
             }
         }
         .padding(.top, 12)
