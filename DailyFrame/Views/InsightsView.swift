@@ -96,11 +96,20 @@ struct InsightsView: View {
                         .padding()
                 } else {
                     let week = weeklyInsights[selectedWeekIndex]
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Week of \(week.weekStart.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.headline)
+                    let insights = week.insights
 
-                        let insights = week.insights
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Week header
+                        HStack {
+                            Image(systemName: "calendar")
+                                .font(.title2)
+                                .foregroundStyle(.primary)
+                            Text("Week of \(week.weekStart.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .padding(.bottom, 4)
 
                         // Mood Trend
                         InsightCard {
@@ -121,14 +130,17 @@ struct InsightsView: View {
                             }
                         }
 
-                        // Activity Patterns
+                        // Activity Highlights
                         if !insights.activityPatterns.isEmpty {
                             InsightCard {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Activity Highlights")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-
+                                    HStack {
+                                        Image(systemName: "bolt.heart")
+                                            .foregroundStyle(.pink)
+                                        Text("Activity Highlights")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
                                     ForEach(insights.activityPatterns.prefix(3), id: \.keyword) { pattern in
                                         HStack {
                                             Text(pattern.emoji)
@@ -156,7 +168,6 @@ struct InsightsView: View {
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                 }
-
                                 Text(insights.reflectionPrompt)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -168,10 +179,13 @@ struct InsightsView: View {
                         if !insights.keywordFrequency.isEmpty {
                             InsightCard {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Trending Keywords")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                            .foregroundStyle(.purple)
+                                        Text("Trending Keywords")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
                                     let sortedKeywords = insights.keywordFrequency.sorted { $0.value > $1.value }
                                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
                                         ForEach(sortedKeywords.prefix(6), id: \.key) { keyword, count in
@@ -207,8 +221,7 @@ struct InsightsView: View {
         .onChange(of: weeklyInsights.count) { _ in
             selectedWeekIndex = 0
         }
-        .onChange(of: selectedWeekIndex) { newIndex in
-        }
+        .onChange(of: selectedWeekIndex) { newIndex in }
         .onChange(of: entries) { _ in
             // Re-select the current week if it exists, otherwise fallback to 0
             let calendar = Calendar.current

@@ -64,11 +64,9 @@ class AIAnalysisService: ObservableObject {
     func generateLocalSummary(from transcript: String) -> String {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = transcript
-        
         let sentences = tokenizer.tokens(for: transcript.startIndex..<transcript.endIndex).map {
             String(transcript[$0])
         }
-        
         // Return first 2-3 most meaningful sentences
         return Array(sentences.prefix(3)).joined(separator: " ")
     }
