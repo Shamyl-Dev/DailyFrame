@@ -126,6 +126,28 @@ struct RecordingView: View {
         } message: {
             Text(videoRecorder.errorMessage ?? "Camera and microphone access is required.")
         }
+        .onChange(of: videoRecorder.didAutoStopRecording) { autoStopped in
+            if autoStopped {
+                // Wait for the video file to exist before transitioning
+                Task {
+                    let url = videoRecorder.getVideoURL(for: selectedDate)
+                    var attempts = 0
+                    while (url == nil || !FileManager.default.fileExists(atPath: url!.path)) && attempts < 20 {
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
+                        attempts += 1
+                    }
+                    if let videoURL = videoRecorder.getVideoURL(for: selectedDate) {
+                        await MainActor.run {
+                            transitionToPlayback(videoURL: videoURL)
+                        }
+                    } else {
+                        // Optionally show an error if file never appears
+                        transcriptError = "Recording file not found."
+                    }
+                    videoRecorder.didAutoStopRecording = false // Reset for next time
+                }
+            }
+        }
     }
     
     // MARK: - State-dependent properties

@@ -13,6 +13,7 @@ class VideoRecorder: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var previewLayer: AVCaptureVideoPreviewLayer?
     @Published var isSessionActive = false // 🔧 NEW: Track if session is active
+    @Published var didAutoStopRecording: Bool = false
     
     private var captureSession: AVCaptureSession?
     private var videoDeviceInput: AVCaptureDeviceInput?
@@ -536,7 +537,15 @@ class VideoRecorder: NSObject, ObservableObject {
     private func startTimer() {
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.recordingDuration += 1
+                guard let self = self else { return }
+                self.recordingDuration += 1
+                if self.recordingDuration >= 300 { // 5 minutes
+                    self.stopTimer()
+                    self.didAutoStopRecording = true // 👈 Add this
+                    Task {
+                        await self.stopRecording()
+                    }
+                }
             }
         }
     }
