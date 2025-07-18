@@ -47,7 +47,7 @@ struct MonthlyInsightsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 28) {
                 // Month picker
                 if monthlyInsights.count > 1 {
                     Picker("Select Month", selection: $selectedMonthIndex) {
@@ -61,7 +61,6 @@ struct MonthlyInsightsView: View {
                     .padding(.bottom, 8)
                 }
 
-                // Show insights for selected month
                 if monthlyInsights.isEmpty {
                     Text("No completed months to show insights yet.")
                         .font(.caption)
@@ -72,36 +71,71 @@ struct MonthlyInsightsView: View {
                     let insights = month.insights
                     let monthEntries = month.entries
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Month of \(month.monthStart.formatted(.dateTime.month().year()))")
-                            .font(.headline)
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Month header
+                        HStack {
+                            Image(systemName: "calendar")
+                                .font(.title2)
+                                .foregroundStyle(.primary)
+                            Text(month.monthStart.formatted(.dateTime.month().year()))
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                            Spacer()
+                        }
+                        .padding(.bottom, 4)
 
-                        // 1. Streaks & Consistency
-                        let streak = longestStreak(entries: monthEntries)
-                        let daysRecorded = monthEntries.count
-                        let totalDays = Calendar.current.range(of: .day, in: .month, for: month.monthStart)?.count ?? 0
-                        Text("Entries this month: \(daysRecorded) / \(totalDays) • Longest streak: \(streak) days")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        // 2. Mood Distribution Pie Chart
-                        MoodPieChartView(moodCounts: moodDistribution(entries: monthEntries))
-
-                        // 3. Most Mentioned People/Places
-                        let entities = AIAnalysisService.shared.extractEntities(from: monthEntries)
-                        if !entities.isEmpty {
-                            Text("Most mentioned: \(entities.joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        // Entries & Streaks
+                        InsightCard {
+                            HStack {
+                                Image(systemName: "checkmark.circle")
+                                    .foregroundStyle(.green)
+                                Text("Entries: \(monthEntries.count) / \(Calendar.current.range(of: .day, in: .month, for: month.monthStart)?.count ?? 0)")
+                                    .font(.subheadline)
+                                Spacer()
+                                Image(systemName: "flame")
+                                    .foregroundStyle(.orange)
+                                Text("Longest streak: \(longestStreak(entries: monthEntries)) days")
+                                    .font(.subheadline)
+                            }
                         }
 
-                        // 4. Top Activities & Trends
+                        // Mood Distribution
+                        InsightCard {
+                            HStack {
+                                Image(systemName: "face.smiling")
+                                    .foregroundStyle(.yellow)
+                                Text("Mood Distribution")
+                                    .font(.subheadline)
+                                Spacer()
+                                MoodPieChartView(moodCounts: moodDistribution(entries: monthEntries))
+                            }
+                        }
+
+                        // Most Mentioned Entities
+                        let entities = AIAnalysisService.shared.extractEntities(from: monthEntries)
+                        if !entities.isEmpty {
+                            InsightCard {
+                                HStack {
+                                    Image(systemName: "person.3.sequence")
+                                        .foregroundStyle(.blue)
+                                    Text("Most mentioned: \(entities.joined(separator: ", "))")
+                                        .font(.subheadline)
+                                    Spacer()
+                                }
+                            }
+                        }
+
+                        // Activity Highlights
                         if !insights.activityPatterns.isEmpty {
                             InsightCard {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Activity Highlights")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                    HStack {
+                                        Image(systemName: "bolt.heart")
+                                            .foregroundStyle(.pink)
+                                        Text("Activity Highlights")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
                                     ForEach(insights.activityPatterns.prefix(5), id: \.keyword) { pattern in
                                         HStack {
                                             Text(pattern.emoji)
@@ -119,13 +153,17 @@ struct MonthlyInsightsView: View {
                             }
                         }
 
-                        // 5. Trending Keywords
+                        // Trending Keywords
                         if !insights.keywordFrequency.isEmpty {
                             InsightCard {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Trending Keywords")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                                    HStack {
+                                        Image(systemName: "sparkles")
+                                            .foregroundStyle(.purple)
+                                        Text("Trending Keywords")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
                                     let sortedKeywords = insights.keywordFrequency.sorted { $0.value > $1.value }
                                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
                                         ForEach(sortedKeywords.prefix(8), id: \.key) { keyword, count in
@@ -143,36 +181,48 @@ struct MonthlyInsightsView: View {
                             }
                         }
 
-                        // 6. Compare to Previous Month
+                        // Compare to Previous Month
                         InsightCard {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Compared to previous month")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                HStack {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .foregroundStyle(.primary)
+                                    Text("Compared to previous month")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
                                 Text(compareToPreviousMonth(current: monthEntries, previous: selectedMonthIndex + 1 < monthlyInsights.count ? monthlyInsights[selectedMonthIndex + 1].entries : []))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
 
-                        // 7. Month in Review Summary
+                        // Month in Review
                         InsightCard {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Month in Review")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                HStack {
+                                    Image(systemName: "doc.text.magnifyingglass")
+                                        .foregroundStyle(.primary)
+                                    Text("Month in Review")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
                                 Text(monthSummary(entries: monthEntries))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
 
-                        // 8. Monthly Reflection Prompt
+                        // Monthly Reflection
                         InsightCard {
                             VStack(alignment: .leading) {
-                                Text("Monthly Reflection")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                HStack {
+                                    Image(systemName: "bubble.left.and.bubble.right")
+                                        .foregroundStyle(.primary)
+                                    Text("Monthly Reflection")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
                                 Text(monthlyReflectionPrompt(entries: monthEntries))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -182,7 +232,8 @@ struct MonthlyInsightsView: View {
                     .padding()
                 }
             }
-            .padding()
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
         }
         .onAppear {
             selectedMonthIndex = 0
