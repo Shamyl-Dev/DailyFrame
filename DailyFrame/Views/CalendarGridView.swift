@@ -85,40 +85,6 @@ struct CalendarGridView: View {
             
             Spacer()
             
-            // Add insights button
-            Button(action: {
-                showingInsights = true
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 12))
-                    Text("Insights")
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            
-            // Add monthly insights button
-            Button(action: {
-                showingMonthlyInsights = true
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 12))
-                    Text("Monthly Insights")
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            
             Button(action: nextMonth) {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.secondary)

@@ -11,56 +11,87 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showingRecordingView = false
+    @State private var showingSidebar = false
+    @State private var showingInsights = false           // 👈 Add this line
+    @State private var showingMonthlyInsights = false    // 👈 Add this line
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                // Background with subtle blur
-                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
-                    .ignoresSafeArea(.all)
-                
-                VStack(spacing: 0) {
-                    // App title - smoother transition
-                    headerView
-                        .opacity(showingRecordingView ? 0 : 1)
-                        .scaleEffect(showingRecordingView ? 0.95 : 1.0, anchor: .top)
-                        .offset(y: showingRecordingView ? -20 : 0)
+        ZStack(alignment: .leading) {
+            // Main content
+            NavigationStack {
+                ZStack {
+                    VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                        .ignoresSafeArea(.all)
+                    VStack(spacing: 0) {
+                        // App title - smoother transition
+                        headerView
+                            .opacity(showingRecordingView ? 0 : 1)
+                            .scaleEffect(showingRecordingView ? 0.95 : 1.0, anchor: .top)
+                            .offset(y: showingRecordingView ? -20 : 0)
+                            .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
+                        
+                        // Main calendar view - Allow it to expand
+                        CalendarGridView(
+                            showingRecordingView: $showingRecordingView,
+                            sharedVideoRecorder: sharedVideoRecorder
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.top, showingRecordingView ? -40 : 10)
                         .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
-                    
-                    // Main calendar view - Allow it to expand
-                    CalendarGridView(
-                        showingRecordingView: $showingRecordingView,
-                        sharedVideoRecorder: sharedVideoRecorder
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, showingRecordingView ? -40 : 10)
-                    .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
-                    
-                    // Delete button
-                    Button("Delete All Diary Entries") {
-                        let request = FetchDescriptor<DiaryEntry>()
-                        if let entries = try? modelContext.fetch(request) {
-                            for entry in entries {
-                                modelContext.delete(entry)
+                        
+                        // Delete button
+                        Button("Delete All Diary Entries") {
+                            let request = FetchDescriptor<DiaryEntry>()
+                            if let entries = try? modelContext.fetch(request) {
+                                for entry in entries {
+                                    modelContext.delete(entry)
+                                }
+                                try? modelContext.save()
+                                print("All diary entries deleted.")
                             }
-                            try? modelContext.save()
-                            print("All diary entries deleted.")
                         }
+                        .padding()
+                        .foregroundColor(.red)
                     }
-                    .padding()
-                    .foregroundColor(.red)
+                }
+                .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
+                .onAppear {
+                    print("📱 App started - camera remains OFF until needed")
                 }
             }
+            
+            // Sidebar overlay
+            if showingSidebar {
+                SidebarMenuView(
+                    showWeeklyInsights: { showingInsights = true; showingSidebar = false },
+                    showMonthlyInsights: { showingMonthlyInsights = true; showingSidebar = false },
+                    showVideos: { sharedVideoRecorder.showVideosInFinder(); showingSidebar = false },
+                    closeSidebar: { showingSidebar = false }   // 👈 Add this
+                )
+                .frame(width: 260)
+                .background(.ultraThinMaterial)
+                .transition(.move(edge: .leading))
+                .zIndex(1)
+            }
         }
-        .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
-        .onAppear {
-            print("📱 App started - camera remains OFF until needed")
-        }
+        .animation(.easeInOut(duration: 0.25), value: showingSidebar)
     }
     
     private var headerView: some View {
         ZStack {
+            HStack {
+                // Hamburger menu button
+                Button(action: { showingSidebar = true }) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title2)
+                        .foregroundStyle(.primary)
+                        .padding(8)
+                }
+                .buttonStyle(.plain)
+                .help("Menu")
+                Spacer()
+            }
             // Centered title
             VStack(spacing: 4) {
                 Text("DailyFrame")
@@ -105,6 +136,54 @@ struct ContentView: View {
         .padding(.top, 8)
         .padding(.bottom, 10)
         .padding(.horizontal, 20)
+    }
+}
+
+struct SidebarMenuView: View {
+    var showWeeklyInsights: () -> Void
+    var showMonthlyInsights: () -> Void
+    var showVideos: () -> Void
+    var closeSidebar: () -> Void    // 👈 Add this
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            HStack {
+                Text("Menu")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                Spacer()
+                Button(action: closeSidebar) {   // 👈 Use this
+                    Image(systemName: "xmark")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, 8)
+
+            Button(action: showWeeklyInsights) {
+                Label("Weekly Insights", systemImage: "chart.line.uptrend.xyaxis")
+            }
+            .buttonStyle(.plain)
+            .font(.headline)
+
+            Button(action: showMonthlyInsights) {
+                Label("Monthly Insights", systemImage: "calendar")
+            }
+            .buttonStyle(.plain)
+            .font(.headline)
+
+            Button(action: showVideos) {
+                Label("Videos", systemImage: "film")
+            }
+            .buttonStyle(.plain)
+            .font(.headline)
+
+            Spacer()
+        }
+        .padding(24)
+        .frame(width: 260, alignment: .leading)
+        .background(.ultraThinMaterial)
     }
 }
 
