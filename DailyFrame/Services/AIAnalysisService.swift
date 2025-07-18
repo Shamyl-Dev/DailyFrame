@@ -32,21 +32,33 @@ class AIAnalysisService: ObservableObject {
     static let shared = AIAnalysisService()
     
     func analyzeSentiment(text: String) -> (score: Double, label: String) {
-        let tagger = NLTagger(tagSchemes: [.sentimentScore])
-        tagger.string = text
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        var totalScore = 0.0
+        var count = 0
 
-        let (sentiment, _) = tagger.tag(at: text.startIndex, unit: .paragraph, scheme: .sentimentScore)
-        let score = Double(sentiment?.rawValue ?? "0") ?? 0.0
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let sentence = String(text[range])
+            let tagger = NLTagger(tagSchemes: [.sentimentScore])
+            tagger.string = sentence
+            let (sentiment, _) = tagger.tag(at: sentence.startIndex, unit: .paragraph, scheme: .sentimentScore)
+            let score = Double(sentiment?.rawValue ?? "0") ?? 0.0
+            totalScore += score
+            count += 1
+            return true
+        }
+
+        let avgScore = count > 0 ? totalScore / Double(count) : 0.0
 
         let label: String
-        if score > 0.15 {
+        if avgScore > -0.60 {
             label = "Positive"
-        } else if score < -0.5 {
+        } else if avgScore < -0.80 {
             label = "Negative"
         } else {
             label = "Neutral"
         }
-        return (score, label)
+        return (avgScore, label)
     }
     
     func generateLocalSummary(from transcript: String) -> String {
@@ -64,31 +76,49 @@ class AIAnalysisService: ObservableObject {
     func extractKeywords(from transcript: String) -> [String] {
         let tagger = NLTagger(tagSchemes: [.nameType, .lexicalClass])
         tagger.string = transcript
-        
+        tagger.setLanguage(.english, range: transcript.startIndex..<transcript.endIndex)
+
         var keywords: [String] = []
-        tagger.enumerateTags(in: transcript.startIndex..<transcript.endIndex, 
-                            unit: .word, 
+        tagger.enumerateTags(in: transcript.startIndex..<transcript.endIndex,
+                            unit: .word,
                             scheme: .lexicalClass) { tag, tokenRange in
+            let word = String(transcript[tokenRange])
+
             if tag == .noun || tag == .verb {
-                let keyword = String(transcript[tokenRange])
-                if keyword.count > 3 { // Filter short words
-                    keywords.append(keyword)
+                if word.count > 3 {
+                    keywords.append(word)
                 }
             }
             return true
         }
-        return Array(Set(keywords)) // Remove duplicates
+        return keywords
     }
     
-    func generateWeeklyInsights(entries: [DiaryEntry]) -> WeeklyInsights {
-        let lastWeekEntries = getLastWeekEntries(entries)
-        let previousWeekEntries = getPreviousWeekEntries(entries)
-        
+    func extractEntities(from entries: [DiaryEntry]) -> [String] {
+        var entities: [String: Int] = [:]
+        for entry in entries {
+            guard let transcript = entry.transcription else { continue }
+            let tagger = NLTagger(tagSchemes: [.nameType])
+            tagger.string = transcript
+            tagger.setLanguage(.english, range: transcript.startIndex..<transcript.endIndex)
+            tagger.enumerateTags(in: transcript.startIndex..<transcript.endIndex, unit: .word, scheme: .nameType) { tag, tokenRange in
+                if let tag = tag, tag == .personalName || tag == .placeName || tag == .organizationName {
+                    let entity = String(transcript[tokenRange])
+                    entities[entity, default: 0] += 1
+                }
+                return true
+            }
+        }
+        // Return top 3 entities by frequency
+        return Array(entities.sorted { $0.value > $1.value }.prefix(3).map { $0.key })
+    }
+    
+    func generateWeeklyInsights(entries: [DiaryEntry], previousEntries: [DiaryEntry]) -> WeeklyInsights {
         return WeeklyInsights(
-            moodTrend: analyzeMoodTrend(current: lastWeekEntries, previous: previousWeekEntries),
-            keywordFrequency: analyzeKeywordFrequency(entries: lastWeekEntries),
-            activityPatterns: analyzeActivityPatterns(entries: lastWeekEntries),
-            reflectionPrompt: generateReflectionPrompt(entries: lastWeekEntries)
+            moodTrend: analyzeMoodTrend(current: entries, previous: previousEntries),
+            keywordFrequency: analyzeKeywordFrequency(entries: entries),
+            activityPatterns: analyzeActivityPatterns(entries: entries),
+            reflectionPrompt: generateReflectionPrompt(entries: entries)
         )
     }
     
@@ -114,17 +144,23 @@ class AIAnalysisService: ObservableObject {
     }
     
     private func analyzeMoodTrend(current: [DiaryEntry], previous: [DiaryEntry]) -> MoodTrend {
-        let currentPositive = current.filter { $0.mood == "Positive" }.count
         let currentTotal = current.count
-        let currentRatio = currentTotal > 0 ? Double(currentPositive) / Double(currentTotal) : 0.0
-        
-        let previousPositive = previous.filter { $0.mood == "Positive" }.count
         let previousTotal = previous.count
-        let previousRatio = previousTotal > 0 ? Double(previousPositive) / Double(previousTotal) : 0.0
-        
+
+        // If either week has no entries, don't show a trend
+        if currentTotal == 0 || previousTotal == 0 {
+            return MoodTrend(direction: .stable, percentage: 0, emoji: "🟡")
+        }
+
+        let currentPositive = current.filter { $0.mood == "Positive" }.count
+        let currentRatio = Double(currentPositive) / Double(currentTotal)
+
+        let previousPositive = previous.filter { $0.mood == "Positive" }.count
+        let previousRatio = Double(previousPositive) / Double(previousTotal)
+
         let change = currentRatio - previousRatio
         let percentage = Int(abs(change) * 100)
-        
+
         if change > 0.05 {
             return MoodTrend(direction: .up, percentage: percentage, emoji: "🟢")
         } else if change < -0.05 {
@@ -135,19 +171,20 @@ class AIAnalysisService: ObservableObject {
     }
     
     private func analyzeKeywordFrequency(entries: [DiaryEntry]) -> [String: Int] {
+        let stopwords: Set<String> = [
+            "the", "and", "for", "with", "that", "this", "from", "have", "has", "was", "were", "are", "but", "not", "you", "your", "they", "them", "their", "it's", "i'm", "i've", "we", "us", "our", "me", "my", "mine", "a", "an", "of", "to", "in", "on", "at", "by", "as", "is", "it", "be", "so", "do", "did", "can", "could", "would", "should", "will", "just", "about", "more", "some", "any", "all", "no", "yes", "if", "or", "than", "then", "when", "where", "who", "what", "which", "how", "why", "because", "bunch", "stuff", "words", "month", "seconds", "couple"
+        ]
         var keywordCounts: [String: Int] = [:]
-        
         for entry in entries {
             guard let transcript = entry.transcription else { continue }
             let keywords = extractKeywords(from: transcript)
-            
             for keyword in keywords {
                 let lowercased = keyword.lowercased()
-                keywordCounts[lowercased, default: 0] += 1
+                if lowercased.count > 2 && !stopwords.contains(lowercased) {
+                    keywordCounts[lowercased, default: 0] += 1
+                }
             }
         }
-        
-        // Return top 10 most frequent keywords - fix the Dictionary initializer
         return Dictionary(uniqueKeysWithValues: Array(keywordCounts.sorted { $0.value > $1.value }.prefix(10)))
     }
     
@@ -225,5 +262,27 @@ class AIAnalysisService: ObservableObject {
         } else {
             return "What was the most meaningful moment of your week, and how can you create more experiences like it?"
         }
+    }
+    
+    func groupEntriesByWeek(entries: [DiaryEntry]) -> [[DiaryEntry]] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: entries) { entry in
+            calendar.dateInterval(of: .weekOfYear, for: entry.date)?.start ?? entry.date
+        }
+        // Sort weeks by date descending (most recent first)
+        return grouped
+            .sorted { $0.key > $1.key } // Make sure this is present!
+            .map { $0.value.sorted { $0.date < $1.date } }
+    }
+    
+    func groupEntriesByMonth(entries: [DiaryEntry]) -> [[DiaryEntry]] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: entries) { entry in
+            calendar.dateInterval(of: .month, for: entry.date)?.start ?? entry.date
+        }
+        // Sort months by date descending (most recent first)
+        return grouped
+            .sorted { $0.key > $1.key }
+            .map { $0.value.sorted { $0.date < $1.date } }
     }
 }

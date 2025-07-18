@@ -36,6 +36,20 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, showingRecordingView ? -40 : 10)
                     .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
+                    
+                    // Delete button
+                    Button("Delete All Diary Entries") {
+                        let request = FetchDescriptor<DiaryEntry>()
+                        if let entries = try? modelContext.fetch(request) {
+                            for entry in entries {
+                                modelContext.delete(entry)
+                            }
+                            try? modelContext.save()
+                            print("All diary entries deleted.")
+                        }
+                    }
+                    .padding()
+                    .foregroundColor(.red)
                 }
             }
         }
@@ -79,7 +93,7 @@ struct ContentView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-		                    .overlay(
+                    .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(.quaternary.opacity(0.5), lineWidth: 0.5)
                     )

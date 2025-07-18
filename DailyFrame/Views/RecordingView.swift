@@ -100,7 +100,10 @@ struct RecordingView: View {
                 }
             }
         }
-        .onDisappear { cleanupView() }
+        .onDisappear {
+            cleanupView()
+            removeOrphanedDiaryEntries(context: modelContext)
+        }
         .onKeyDown { keyCode in
             if keyCode == 53 { isPresented = false; return true }
             return false
@@ -302,7 +305,6 @@ struct RecordingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
             } else if !transcriptionService.transcript.isEmpty {
-                // 👇 REMOVE THE INNER SCROLLVIEW, just show the text
                 Text(transcriptionService.transcript)
                     .font(.body)
                     .foregroundStyle(.primary)
@@ -311,6 +313,22 @@ struct RecordingView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
+                
+                // 👇 Add sentiment score display here
+                let sentiment = AIAnalysisService.shared.analyzeSentiment(text: transcriptionService.transcript)
+                HStack(spacing: 8) {
+                    Text("Sentiment Score: \(String(format: "%.2f", sentiment.score))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("(\(sentiment.label))")
+                        .font(.caption2)
+                        .foregroundStyle(
+                            sentiment.label == "Positive" ? .green :
+                            sentiment.label == "Negative" ? .red :
+                            .yellow
+                        )
+                }
+                .padding(.leading, 4)
             }
         }
         .padding(.top, 12)
@@ -543,9 +561,23 @@ struct RecordingView: View {
     }
     
     private func reRecordVideo() {
-        // Delete existing video
+        // Delete existing video file
         if case .playback(let videoURL) = currentState {
             try? FileManager.default.removeItem(at: videoURL)
+        }
+
+        // Delete DiaryEntry if no new video will be recorded
+        if let entry = existingEntry {
+            // Only delete if transcript is empty and no video is present
+            if (entry.transcription?.isEmpty ?? true) && entry.videoURL == nil {
+                modelContext.delete(entry)
+                try? modelContext.save()
+            } else {
+                // Otherwise, just clear transcript and mood
+                entry.transcription = nil
+                entry.mood = nil
+                try? modelContext.save()
+            }
         }
 
         // Clean up player
@@ -565,9 +597,7 @@ struct RecordingView: View {
         Task {
             await videoRecorder.initializeCamera()
             await videoRecorder.startSession()
-
             try? await Task.sleep(for: .milliseconds(200))
-
             await MainActor.run {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentState = .recording
@@ -595,19 +625,30 @@ struct RecordingView: View {
     }
     
     private func saveEntry(videoURL: URL) async {
-        let entry = existingEntry ?? DiaryEntry(date: selectedDate)
+        // Find any existing entry for this date
+        let entry = existingEntry ?? findEntry(for: selectedDate) ?? DiaryEntry(date: selectedDate)
         entry.duration = videoRecorder.recordingDuration
         entry.videoURL = videoURL
-        
-        if existingEntry == nil {
+
+        if entry.id == nil { // Only insert if truly new
             modelContext.insert(entry)
         }
-        
+
         do {
             try modelContext.save()
         } catch {
             videoRecorder.errorMessage = "Failed to save video entry"
         }
+    }
+    
+    // Helper to find entry for date (add to RecordingView)
+    private func findEntry(for date: Date) -> DiaryEntry? {
+        // Use modelContext to fetch entries for the date
+        let request = FetchDescriptor<DiaryEntry>()
+        if let entries = try? modelContext.fetch(request) {
+            return entries.first { Calendar.current.isDate($0.date, inSameDayAs: date) }
+        }
+        return nil
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -633,6 +674,7 @@ struct RecordingView: View {
                     if isTranscribing {
                         transcriptionService.transcript = text
                         entry.transcription = text
+                        try? modelContext.save()
 
                         // Analyze mood and save
                         let moodResult = AIAnalysisService.shared.analyzeSentiment(text: text)
