@@ -31,6 +31,18 @@ enum TrendDirection {
 class AIAnalysisService: ObservableObject {
     static let shared = AIAnalysisService()
     
+    private let userStopwordsKey = "userStopwords"
+    var userStopwords: Set<String> {
+        get {
+            let raw = UserDefaults.standard.string(forKey: userStopwordsKey) ?? ""
+            return Set(raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        }
+        set {
+            let raw = newValue.joined(separator: ",")
+            UserDefaults.standard.set(raw, forKey: userStopwordsKey)
+        }
+    }
+    
     func analyzeSentiment(text: String) -> (score: Double, label: String) {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text
@@ -169,16 +181,17 @@ class AIAnalysisService: ObservableObject {
     }
     
     private func analyzeKeywordFrequency(entries: [DiaryEntry]) -> [String: Int] {
-        let stopwords: Set<String> = [
-            "the", "and", "for", "with", "that", "this", "from", "have", "has", "was", "were", "are", "but", "not", "you", "your", "they", "them", "their", "it's", "i'm", "i've", "we", "us", "our", "me", "my", "mine", "a", "an", "of", "to", "in", "on", "at", "by", "as", "is", "it", "be", "so", "do", "did", "can", "could", "would", "should", "will", "just", "about", "more", "some", "any", "all", "no", "yes", "if", "or", "than", "then", "when", "where", "who", "what", "which", "how", "why", "because", "bunch", "stuff", "words", "month", "seconds", "couple"
+        let builtInStopwords: Set<String> = [
+            "the", "today", "something", "and", "for", "with", "that", "this", "from", "have", "has", "was", "were", "are", "but", "not", "you", "your", "they", "them", "their", "it's", "i'm", "i've", "we", "us", "our", "me", "my", "mine", "a", "an", "of", "to", "in", "on", "at", "by", "as", "is", "it", "be", "so", "do", "did", "can", "could", "would", "should", "will", "just", "about", "more", "some", "any", "all", "no", "yes", "if", "or", "than", "then", "when", "where", "who", "what", "which", "how", "why", "because", "bunch", "stuff", "words", "month", "seconds", "couple"
         ]
+        let allStopwords = builtInStopwords.union(userStopwords)
         var keywordCounts: [String: Int] = [:]
         for entry in entries {
             guard let transcript = entry.transcription else { continue }
             let keywords = extractKeywords(from: transcript)
             for keyword in keywords {
                 let lowercased = keyword.lowercased()
-                if lowercased.count > 2 && !stopwords.contains(lowercased) {
+                if lowercased.count > 2 && !allStopwords.contains(lowercased) {
                     keywordCounts[lowercased, default: 0] += 1
                 }
             }
