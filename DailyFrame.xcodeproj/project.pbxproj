@@ -414,6 +414,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "DailyFrame needs camera access to record your daily video entries";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "DailyFrame needs microphone access to record audio for your video entries";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Speech Recognition to create a written transcript of your video diary entries.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -445,6 +446,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "DailyFrame needs camera access to record your daily video entries";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "DailyFrame needs microphone access to record audio for your video entries";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "This app uses Speech Recognition to create a written transcript of your video diary entries.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
