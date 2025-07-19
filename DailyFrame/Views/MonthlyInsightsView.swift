@@ -128,7 +128,8 @@ struct MonthlyInsightsView: View {
                         }
 
                         // Most Mentioned Entities
-                        let entities = AIAnalysisService.shared.extractEntities(from: monthEntries)
+                        let stopwords = AIAnalysisService.shared.userStopwords
+                        let entities = AIAnalysisService.shared.extractEntities(from: monthEntries).filter { !stopwords.contains($0.lowercased()) }
                         if !entities.isEmpty {
                             InsightCard {
                                 HStack {
@@ -290,7 +291,7 @@ struct MonthlyInsightsView: View {
                                         .font(.subheadline)
                                         .fontWeight(.medium)
                                 }
-                                Text(monthSummary(entries: monthEntries))
+                                Text(monthSummary(entries: monthEntries, insights: insights))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -370,11 +371,9 @@ struct MonthlyInsightsView: View {
     }
 
     // Month summary (simple version)
-    private func monthSummary(entries: [DiaryEntry]) -> String {
-        let keywords = entries.flatMap { AIAnalysisService.shared.extractKeywords(from: $0.transcription ?? "") }
-        let topKeywords = Dictionary(grouping: keywords, by: { $0 }).mapValues { $0.count }
-        let sorted = topKeywords.sorted { $0.value > $1.value }.prefix(3).map { "\($0.key)" }
-        return "This month, you talked most about: \(sorted.joined(separator: ", "))."
+    private func monthSummary(entries: [DiaryEntry], insights: WeeklyInsights) -> String {
+        let trending = Array(insights.keywordFrequency.keys.prefix(3))
+        return "This month, you talked most about: \(trending.joined(separator: ", "))."
     }
 
     // Monthly reflection prompt (simple version)

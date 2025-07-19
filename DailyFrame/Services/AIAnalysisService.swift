@@ -32,6 +32,10 @@ class AIAnalysisService: ObservableObject {
     static let shared = AIAnalysisService()
     
     private let userStopwordsKey = "userStopwords"
+    
+    private let builtInStopwords: Set<String> = [
+        "the", "today", "something", "and", "for", "with", "that", "this", "from", "have", "has", "was", "were", "are", "but", "not", "you", "your", "they", "them", "their", "it's", "i'm", "i've", "we", "us", "our", "me", "my", "mine", "a", "an", "of", "to", "in", "on", "at", "by", "as", "is", "it", "be", "so", "do", "did", "can", "could", "would", "should", "will", "just", "about", "more", "some", "any", "all", "no", "yes", "if", "or", "than", "then", "when", "where", "who", "what", "which", "how", "why", "because", "bunch", "stuff", "words", "month", "seconds", "couple"
+    ]
     var userStopwords: Set<String> {
         get {
             let raw = UserDefaults.standard.string(forKey: userStopwordsKey) ?? ""
@@ -120,7 +124,11 @@ class AIAnalysisService: ObservableObject {
             }
         }
         // Return top 3 entities by frequency
-        return Array(entities.sorted { $0.value > $1.value }.prefix(3).map { $0.key })
+        let stopwords = userStopwords
+        return Array(entities.sorted { $0.value > $1.value }
+            .map { $0.key }
+            .filter { !stopwords.contains($0.lowercased()) }
+            .prefix(3))
     }
     
     func generateWeeklyInsights(entries: [DiaryEntry], previousEntries: [DiaryEntry]) -> WeeklyInsights {
@@ -181,9 +189,6 @@ class AIAnalysisService: ObservableObject {
     }
     
     private func analyzeKeywordFrequency(entries: [DiaryEntry]) -> [String: Int] {
-        let builtInStopwords: Set<String> = [
-            "the", "today", "something", "and", "for", "with", "that", "this", "from", "have", "has", "was", "were", "are", "but", "not", "you", "your", "they", "them", "their", "it's", "i'm", "i've", "we", "us", "our", "me", "my", "mine", "a", "an", "of", "to", "in", "on", "at", "by", "as", "is", "it", "be", "so", "do", "did", "can", "could", "would", "should", "will", "just", "about", "more", "some", "any", "all", "no", "yes", "if", "or", "than", "then", "when", "where", "who", "what", "which", "how", "why", "because", "bunch", "stuff", "words", "month", "seconds", "couple"
-        ]
         let allStopwords = builtInStopwords.union(userStopwords)
         var keywordCounts: [String: Int] = [:]
         for entry in entries {
@@ -258,11 +263,15 @@ class AIAnalysisService: ObservableObject {
         
         // Find most common positive keywords
         var positiveKeywords: [String: Int] = [:]
+        let allStopwords = builtInStopwords.union(userStopwords)
         for entry in positiveEntries {
             guard let transcript = entry.transcription else { continue }
             let keywords = extractKeywords(from: transcript)
             for keyword in keywords {
-                positiveKeywords[keyword.lowercased(), default: 0] += 1
+                let lowercased = keyword.lowercased()
+                if !allStopwords.contains(lowercased) {
+                    positiveKeywords[lowercased, default: 0] += 1
+                }
             }
         }
         
