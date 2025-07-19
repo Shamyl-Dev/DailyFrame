@@ -94,11 +94,11 @@ struct CalendarGridView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .sheet(isPresented: $showingInsights) {
-            InsightsView()
+            InsightsView(isPresented: $showingInsights)
                 .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingMonthlyInsights) {
-            MonthlyInsightsView()
+            MonthlyInsightsView(isPresented: $showingMonthlyInsights)
                 .frame(minWidth: 600, minHeight: 500)
         }
     }

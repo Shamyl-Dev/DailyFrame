@@ -23,6 +23,7 @@ struct MoodPieChartView: View {
 }
 
 struct MonthlyInsightsView: View {
+    @Binding var isPresented: Bool
     @Query private var entries: [DiaryEntry]
 
     var monthlyInsights: [(monthStart: Date, entries: [DiaryEntry], insights: WeeklyInsights)] {
@@ -51,6 +52,18 @@ struct MonthlyInsightsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                HStack {
+                    Spacer()
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3) // Smaller icon
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
+                }
+                .padding(.top, 4) // Optional: reduce vertical space
+
                 // Month picker
                 if monthlyInsights.count > 1 {
                     Picker("Select Month", selection: $selectedMonthIndex) {

@@ -12,6 +12,7 @@ extension AnyTransition {
 }
 
 struct InsightsView: View {
+    @Binding var isPresented: Bool
     @Query private var entries: [DiaryEntry]
 
     // Compute weekly insights
@@ -86,6 +87,18 @@ struct InsightsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                HStack {
+                    Spacer()
+                    Button(action: { isPresented = false }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3) // Smaller icon
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close")
+                }
+                .padding(.top, 4) // Optional: reduce vertical space
+
                 // Dropdown for week selection
                 if weeklyInsights.count > 1 {
                     Picker("Select Week", selection: $selectedWeekIndex) {
@@ -343,6 +356,6 @@ struct InsightCard<Content: View>: View {
 }
 
 #Preview {
-    InsightsView()
+    InsightsView(isPresented: .constant(true))
         .modelContainer(for: DiaryEntry.self, inMemory: true)
 }

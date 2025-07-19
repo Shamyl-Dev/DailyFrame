@@ -96,11 +96,11 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showingSidebar)
         .sheet(isPresented: $showingInsights) {
-            InsightsView()
+            InsightsView(isPresented: $showingInsights)
                 .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingMonthlyInsights) {
-            MonthlyInsightsView()
+            MonthlyInsightsView(isPresented: $showingMonthlyInsights)
                 .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingSettings) {
