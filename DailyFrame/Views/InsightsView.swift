@@ -13,6 +13,7 @@ extension AnyTransition {
 
 struct InsightsView: View {
     @Binding var isPresented: Bool
+    var selectedMonth: Date
     @Query private var entries: [DiaryEntry]
 
     // Compute weekly insights
@@ -21,21 +22,23 @@ struct InsightsView: View {
             ($0.videoURL != nil && FileManager.default.fileExists(atPath: $0.videoURL!.path)) ||
             !($0.transcription?.isEmpty ?? true)
         }
-        print("STEP 1: Valid entry dates:")
-        for entry in validEntries {
-            print(" - \(entry.date)")
-        }
-
-        let weeks = AIAnalysisService.shared.groupEntriesByWeek(entries: validEntries)
-        print("STEP 2: Week groups (raw):")
-        for (i, weekEntries) in weeks.enumerated() {
-            print("  Week \(i):")
-            for entry in weekEntries {
-                print("    - \(entry.date)")
-            }
-        }
-
         let calendar = Calendar.current
+
+        // Filter entries for the selected month
+        let monthEntries = validEntries.filter {
+            calendar.isDate($0.date, equalTo: selectedMonth, toGranularity: .month)
+        }
+
+        // If no entries for selected month, fallback to current month
+        let fallbackMonth = Date()
+        let fallbackEntries = validEntries.filter {
+            calendar.isDate($0.date, equalTo: fallbackMonth, toGranularity: .month)
+        }
+
+        let entriesToUse = monthEntries.isEmpty ? fallbackEntries : monthEntries
+
+        let weeks = AIAnalysisService.shared.groupEntriesByWeek(entries: entriesToUse)
+
         let now = Date()
         return weeks
             .map { weekEntries in
@@ -304,10 +307,16 @@ struct InsightsView: View {
         .onAppear {
             let calendar = Calendar.current
             let now = Date()
-            if let idx = weeklyInsights.firstIndex(where: { calendar.isDate($0.weekStart, equalTo: now, toGranularity: .weekOfYear) }) {
-                selectedWeekIndex = idx
+            if calendar.isDate(selectedMonth, equalTo: now, toGranularity: .month) {
+                // If current month, select most recent completed week
+                if let idx = weeklyInsights.firstIndex(where: { calendar.isDate($0.weekStart, equalTo: now, toGranularity: .weekOfYear) }) {
+                    selectedWeekIndex = idx
+                } else {
+                    selectedWeekIndex = 0
+                }
             } else {
-                selectedWeekIndex = 0 // fallback
+                // If another month, just select the first week
+                selectedWeekIndex = 0
             }
         }
         .onChange(of: weeklyInsights.count) { oldValue, newValue in
@@ -356,6 +365,6 @@ struct InsightCard<Content: View>: View {
 }
 
 #Preview {
-    InsightsView(isPresented: .constant(true))
+    InsightsView(isPresented: .constant(true), selectedMonth: Date())
         .modelContainer(for: DiaryEntry.self, inMemory: true)
 }

@@ -19,6 +19,8 @@ struct ContentView: View {
     @State private var appColorScheme: ColorScheme? = .dark
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
     
+    @State private var currentMonth = Date()
+    
     var body: some View {
         ZStack(alignment: .leading) {
             // Main content
@@ -37,7 +39,8 @@ struct ContentView: View {
                         // Main calendar view - Allow it to expand
                         CalendarGridView(
                             showingRecordingView: $showingRecordingView,
-                            sharedVideoRecorder: sharedVideoRecorder
+                            sharedVideoRecorder: sharedVideoRecorder,
+                            currentMonth: $currentMonth // <-- Add this
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.top, showingRecordingView ? -40 : 10)
@@ -96,12 +99,18 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showingSidebar)
         .sheet(isPresented: $showingInsights) {
-            InsightsView(isPresented: $showingInsights)
-                .frame(minWidth: 600, minHeight: 500)
+            InsightsView(
+                isPresented: $showingInsights,
+                selectedMonth: currentMonth // <-- Add this argument
+            )
+            .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingMonthlyInsights) {
-            MonthlyInsightsView(isPresented: $showingMonthlyInsights)
-                .frame(minWidth: 600, minHeight: 500)
+            MonthlyInsightsView(
+                isPresented: $showingMonthlyInsights,
+                selectedMonth: currentMonth
+            )
+            .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(videoRecorder: sharedVideoRecorder)

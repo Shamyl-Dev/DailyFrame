@@ -8,15 +8,15 @@ extension NSImage: @unchecked Sendable {}
 
 struct CalendarGridView: View {
     @Query private var entries: [DiaryEntry]
-    @State private var selectedDate = Date()
-    @State private var currentMonth = Date()
-    @State private var selectedEntryDate: Date?
     @Binding var showingRecordingView: Bool
     let sharedVideoRecorder: VideoRecorder
+    @Binding var currentMonth: Date // <-- Use binding here
+    // Remove the @State for currentMonth!
     
     // Add this state variable at the top of CalendarGridView
     @State private var showingInsights = false
     @State private var showingMonthlyInsights = false
+    @State private var selectedEntryDate: Date? // <-- Add this back
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -94,12 +94,18 @@ struct CalendarGridView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .sheet(isPresented: $showingInsights) {
-            InsightsView(isPresented: $showingInsights)
-                .frame(minWidth: 600, minHeight: 500)
+            InsightsView(
+                isPresented: $showingInsights,
+                selectedMonth: currentMonth // <-- Add this property
+            )
+            .frame(minWidth: 600, minHeight: 500)
         }
         .sheet(isPresented: $showingMonthlyInsights) {
-            MonthlyInsightsView(isPresented: $showingMonthlyInsights)
-                .frame(minWidth: 600, minHeight: 500)
+            MonthlyInsightsView(
+                isPresented: $showingMonthlyInsights,
+                selectedMonth: currentMonth // <-- Pass this
+            )
+            .frame(minWidth: 600, minHeight: 500)
         }
     }
     

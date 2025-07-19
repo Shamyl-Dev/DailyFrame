@@ -24,6 +24,7 @@ struct MoodPieChartView: View {
 
 struct MonthlyInsightsView: View {
     @Binding var isPresented: Bool
+    var selectedMonth: Date // <-- Add this
     @Query private var entries: [DiaryEntry]
 
     var monthlyInsights: [(monthStart: Date, entries: [DiaryEntry], insights: WeeklyInsights)] {
@@ -320,7 +321,12 @@ struct MonthlyInsightsView: View {
             .padding(.horizontal, 8)
         }
         .onAppear {
-            selectedMonthIndex = 0
+            // Find the index of the selected month
+            if let idx = monthlyInsights.firstIndex(where: { Calendar.current.isDate($0.monthStart, equalTo: selectedMonth, toGranularity: .month) }) {
+                selectedMonthIndex = idx
+            } else {
+                selectedMonthIndex = 0
+            }
         }
     }
 
