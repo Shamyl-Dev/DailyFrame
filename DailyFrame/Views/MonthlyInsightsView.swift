@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import Charts
 
+
 struct MoodPieChartView: View {
     let moodCounts: [String: Int]
     var body: some View {
@@ -44,6 +45,8 @@ struct MonthlyInsightsView: View {
     }
 
     @State private var selectedMonthIndex: Int = 0
+    @State private var isEditingKeywords = false
+    @State private var keywordRefreshID = UUID()
 
     var body: some View {
         ScrollView {
@@ -163,8 +166,24 @@ struct MonthlyInsightsView: View {
                                         Text("Trending Keywords")
                                             .font(.subheadline)
                                             .fontWeight(.medium)
+                                        Spacer()
+                                        Button(action: { isEditingKeywords.toggle() }) {
+                                            Image(systemName: isEditingKeywords ? "checkmark.circle" : "pencil")
+                                                .foregroundColor(.blue)
+                                                .font(.title2)
+                                                .padding(4)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(isEditingKeywords ? "Done" : "Edit keywords")
                                     }
-                                    let sortedKeywords = insights.keywordFrequency.sorted { $0.value > $1.value }
+                                    let sortedKeywords = insights.keywordFrequency
+                                        .sorted { 
+                                            if $0.value == $1.value {
+                                                return $0.key < $1.key
+                                            }
+                                            return $0.value > $1.value
+                                        }
+
                                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
                                         ForEach(sortedKeywords.prefix(8), id: \.key) { keyword, count in
                                             HStack {
@@ -174,6 +193,57 @@ struct MonthlyInsightsView: View {
                                                 Text("(\(count))")
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
+                                                if isEditingKeywords {
+                                                    Button(action: {
+                                                        withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                                                            AIAnalysisService.shared.userStopwords.insert(keyword.lowercased())
+                                                            keywordRefreshID = UUID()
+                                                        }
+                                                    }) {
+                                                        Image(systemName: "xmark.circle.fill")
+                                                            .foregroundColor(.gray)
+                                                            .font(.caption)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .help("Remove this keyword from trending")
+                                                }
+                                            }
+                                            .transition(.pop)
+                                        }
+                                    }
+                                    .id(keywordRefreshID)
+                                    .animation(.spring(response: 0.5, dampingFraction: 0.6), value: keywordRefreshID)
+
+                                    // Show removed keywords section if editing
+                                    if isEditingKeywords && !AIAnalysisService.shared.userStopwords.isEmpty {
+                                        Divider().padding(.vertical, 6)
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text("Removed Keywords")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
+                                                ForEach(Array(AIAnalysisService.shared.userStopwords).sorted(), id: \.self) { word in
+                                                    HStack {
+                                                        Text(word.capitalized)
+                                                            .font(.caption)
+                                                        Spacer()
+                                                        Button(action: {
+                                                            withAnimation(.easeInOut(duration: 0.25)) {
+                                                                var stopwords = AIAnalysisService.shared.userStopwords
+                                                                stopwords.remove(word)
+                                                                AIAnalysisService.shared.userStopwords = stopwords
+                                                                keywordRefreshID = UUID()
+                                                            }
+                                                        }) {
+                                                            Image(systemName: "plus.circle.fill")
+                                                                .foregroundColor(.blue)
+                                                                .font(.caption)
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                        .help("Restore this keyword")
+                                                    }
+                                                    .transition(.scale.combined(with: .opacity))
+                                                }
                                             }
                                         }
                                     }
