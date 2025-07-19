@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showingSidebar = false
     @State private var showingInsights = false           // 👈 Add this line
     @State private var showingMonthlyInsights = false    // 👈 Add this line
+    @State private var showingSettings = false
     @State private var sidebarIsClosing = false
     @State private var appColorScheme: ColorScheme? = .dark
     @ObservedObject private var sharedVideoRecorder = VideoRecorder.shared
@@ -83,6 +84,7 @@ struct ContentView: View {
                             sidebarIsClosing = false
                         }
                     },
+                    showSettings: { showingSettings = true },
                     isClosing: sidebarIsClosing,
                     appColorScheme: $appColorScheme // 👈 Add this
                 )
@@ -100,6 +102,10 @@ struct ContentView: View {
         .sheet(isPresented: $showingMonthlyInsights) {
             MonthlyInsightsView()
                 .frame(minWidth: 600, minHeight: 500)
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(videoRecorder: sharedVideoRecorder)
+                .frame(minWidth: 400, minHeight: 320)
         }
         .preferredColorScheme(appColorScheme)
     }
@@ -141,6 +147,7 @@ struct SidebarMenuView: View {
     var showMonthlyInsights: () -> Void
     var showVideos: () -> Void
     var closeSidebar: () -> Void
+    var showSettings: () -> Void
     var isClosing: Bool
     @Binding var appColorScheme: ColorScheme?
 
@@ -195,6 +202,15 @@ struct SidebarMenuView: View {
                 .toggleStyle(SwitchToggleStyle())
             }
             .padding(.top, 8)
+
+            Divider().padding(.vertical, 8)
+
+            Button(action: showSettings) {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .font(.headline)
+            .allowsHitTesting(!isClosing)
 
             Spacer()
         }

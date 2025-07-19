@@ -15,9 +15,12 @@ class VideoRecorder: NSObject, ObservableObject {
     @Published var isSessionActive = false // 🔧 NEW: Track if session is active
     @Published var didAutoStopRecording: Bool = false
     
+    @Published var availableVideoDevices: [AVCaptureDevice] = []
+    @Published var availableAudioDevices: [AVCaptureDevice] = []
+    
     private var captureSession: AVCaptureSession?
-    private var videoDeviceInput: AVCaptureDeviceInput?
-    private var audioDeviceInput: AVCaptureDeviceInput?
+    public var videoDeviceInput: AVCaptureDeviceInput?
+    public var audioDeviceInput: AVCaptureDeviceInput?
     private var movieFileOutput: AVCaptureMovieFileOutput?
     private var recordingTimer: Timer?
     private var currentOutputURL: URL?
@@ -688,6 +691,75 @@ class VideoRecorder: NSObject, ObservableObject {
             let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             let bundleID = Bundle.main.bundleIdentifier ?? "com.shamyldev.DailyFrame"
             return appSupportURL.appendingPathComponent(bundleID).appendingPathComponent("Videos", isDirectory: true)
+        }
+    }
+    
+    func discoverDevices() {
+        let videoDevices = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .external], mediaType: .video, position: .unspecified).devices
+        let audioDevices = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+        self.availableVideoDevices = videoDevices
+        self.availableAudioDevices = audioDevices
+    }
+    
+    public func switchCamera(to deviceID: String) {
+        guard let session = captureSession else {
+            print("❌ No capture session available")
+            return
+        }
+        guard let newDevice = availableVideoDevices.first(where: { $0.uniqueID == deviceID }) else {
+            print("❌ Camera device not found for ID: \(deviceID)")
+            return
+        }
+        guard let oldInput = videoDeviceInput else {
+            print("❌ No existing video input")
+            return
+        }
+        do {
+            let newInput = try AVCaptureDeviceInput(device: newDevice)
+            session.beginConfiguration()
+            session.removeInput(oldInput)
+            if session.canAddInput(newInput) {
+                session.addInput(newInput)
+                videoDeviceInput = newInput
+                print("✅ Camera switched to: \(newDevice.localizedName)")
+            } else {
+                session.addInput(oldInput) // Rollback
+                print("❌ Could not add new camera input, rolled back")
+            }
+            session.commitConfiguration()
+        } catch {
+            print("❌ Error switching camera: \(error)")
+        }
+    }
+    
+    public func switchMicrophone(to deviceID: String) {
+        guard let session = captureSession else {
+            print("❌ No capture session available")
+            return
+        }
+        guard let newDevice = availableAudioDevices.first(where: { $0.uniqueID == deviceID }) else {
+            print("❌ Microphone device not found for ID: \(deviceID)")
+            return
+        }
+        guard let oldInput = audioDeviceInput else {
+            print("❌ No existing audio input")
+            return
+        }
+        do {
+            let newInput = try AVCaptureDeviceInput(device: newDevice)
+            session.beginConfiguration()
+            session.removeInput(oldInput)
+            if session.canAddInput(newInput) {
+                session.addInput(newInput)
+                audioDeviceInput = newInput
+                print("✅ Microphone switched to: \(newDevice.localizedName)")
+            } else {
+                session.addInput(oldInput) // Rollback
+                print("❌ Could not add new microphone input, rolled back")
+            }
+            session.commitConfiguration()
+        } catch {
+            print("❌ Error switching microphone: \(error)")
         }
     }
 }
