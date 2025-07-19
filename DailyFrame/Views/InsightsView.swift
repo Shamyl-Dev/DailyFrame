@@ -1,16 +1,6 @@
 import SwiftUI
 import SwiftData
 
-// Add near the top of InsightsView.swift
-extension AnyTransition {
-    static var pop: AnyTransition {
-        .asymmetric(
-            insertion: .identity,
-            removal: .scale(scale: 1.7, anchor: .center).combined(with: .opacity)
-        )
-    }
-}
-
 struct InsightsView: View {
     @Query private var entries: [DiaryEntry]
 
