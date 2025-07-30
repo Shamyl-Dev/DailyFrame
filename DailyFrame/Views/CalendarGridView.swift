@@ -10,13 +10,13 @@ struct CalendarGridView: View {
     @Query private var entries: [DiaryEntry]
     @Binding var showingRecordingView: Bool
     let sharedVideoRecorder: VideoRecorder
-    @Binding var currentMonth: Date // <-- Use binding here
-    // Remove the @State for currentMonth!
+    @Binding var currentMonth: Date
     
-    // Add this state variable at the top of CalendarGridView
     @State private var showingInsights = false
     @State private var showingMonthlyInsights = false
-    @State private var selectedEntryDate: Date? // <-- Add this back
+    @State private var selectedEntryDate: Date?
+    @State private var showAllThumbnails = false
+    @State private var thumbnailsAnimationID = UUID() // <-- Add this
     
     private let calendar = Calendar.current
     private let dateFormatter: DateFormatter = {
@@ -90,6 +90,17 @@ struct CalendarGridView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            
+            // Add the toggle here
+            Toggle(isOn: $showAllThumbnails) {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.title3)
+                    .foregroundColor(.accentColor)
+                    .help("Show all video thumbnails")
+            }
+            .toggleStyle(SwitchToggleStyle())
+            .frame(width: 60)
+            .padding(.leading, 12)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -135,9 +146,9 @@ struct CalendarGridView: View {
                             isToday: calendar.isDateInToday(date),
                             onTap: {
                                 selectedEntryDate = date
-                                // 🔧 SIMPLIFIED: Always open RecordingView - it will handle video/recording logic
                                 showingRecordingView = true
-                            }
+                            },
+                            showAllThumbnails: showAllThumbnails // <-- Add this
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -199,6 +210,7 @@ struct DayCell: View {
     let isCurrentMonth: Bool
     let isToday: Bool
     let onTap: () -> Void
+    let showAllThumbnails: Bool // <-- Add this
 
     @State private var isHovered = false
     @State private var thumbnail: NSImage?
@@ -207,8 +219,9 @@ struct DayCell: View {
     @State private var player: AVPlayer?
     @State private var playerReady = false
     @State private var playerStatusCancellable: AnyCancellable?
-    @State private var endObserver: NSObjectProtocol? // 1. Add a property to store the observer token
+    @State private var endObserver: NSObjectProtocol?
     @State private var hideThumbnail = false
+    @State private var thumbnailVisible = false // <-- Add this
 
     private let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -246,7 +259,7 @@ struct DayCell: View {
                                     entry?.mood == "Neutral" ? .yellow :
                                     .blue
                                 )
-                                .opacity(isHovered && hasVideo ? 0 : 1)
+                                .opacity((isHovered || showAllThumbnails) && hasVideo ? 0 : 1)
                                 .animation(.easeInOut(duration: 0.18), value: isHovered && hasVideo)
                         }
                     }
@@ -258,7 +271,7 @@ struct DayCell: View {
             .zIndex(1)
 
             // --- Internal Popover Thumbnail Preview ---
-            if isHovered && hasVideo {
+            if hasVideo && (showAllThumbnails || isHovered) {
                 GeometryReader { geo in
                     let thumbWidth = geo.size.width * 0.8
                     let thumbHeight = geo.size.height * 0.55
@@ -274,6 +287,8 @@ struct DayCell: View {
                                         .aspectRatio(contentMode: .fill)
                                         .frame(width: thumbWidth, height: thumbHeight)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .opacity(showAllThumbnails ? (thumbnailVisible ? 1 : 0) : 1) // <-- Key change
+                                        .animation(showAllThumbnails ? .easeInOut(duration: 0.4) : .none, value: thumbnailVisible) // <-- Only animate when toggle is ON
                                         .opacity(showLivePreview && hideThumbnail ? 0 : 1)
                                         .animation(.easeInOut(duration: 0.18), value: showLivePreview && hideThumbnail)
                                 }
@@ -307,13 +322,18 @@ struct DayCell: View {
                 Task { @MainActor in
                     let url = VideoRecorder.shared.getVideoURL(for: date)
                     if let url = url {
-                        // Start timer for live preview
+                        // ALWAYS cancel any existing timer first
                         livePreviewTimer?.invalidate()
+                        livePreviewTimer = nil
+                        
+                        // Start NEW timer for live preview
                         livePreviewTimer = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: false) { _ in
                             Task { @MainActor in
+                                // Double-check we're still hovering before starting preview
+                                guard self.isHovered else { return }
+                                
                                 let player = AVPlayer(url: url)
                                 player.actionAtItemEnd = .none
-                                // 2. When adding the observer, store the token:
                                 endObserver = NotificationCenter.default.addObserver(
                                     forName: .AVPlayerItemDidPlayToEndTime,
                                     object: player.currentItem,
@@ -334,7 +354,6 @@ struct DayCell: View {
                                         .sink { status in
                                             if status == .readyToPlay {
                                                 self.playerReady = true
-                                                // Add a short delay before hiding the thumbnail
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                                                     self.hideThumbnail = true
                                                 }
@@ -348,13 +367,20 @@ struct DayCell: View {
                         if thumbnail == nil {
                             Task {
                                 if let thumb = try? await VideoRecorder.shared.generateThumbnail(for: url) {
-                                    await MainActor.run { self.thumbnail = thumb }
+                                    await MainActor.run { 
+                                        self.thumbnail = thumb
+                                        // Only set thumbnailVisible instantly if toggle is OFF
+                                        if !self.showAllThumbnails {
+                                            self.thumbnailVisible = true
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             } else {
+                // ALWAYS cleanup when hover ends
                 cleanupDayCellResources()
             }
         }
@@ -365,24 +391,113 @@ struct DayCell: View {
             onTap()
         }
         .opacity(isCurrentMonth ? 1.0 : 0.3)
+        .onAppear {
+            if hasVideo && showAllThumbnails && thumbnail == nil {
+                Task {
+                    if let url = VideoRecorder.shared.getVideoURL(for: date),
+                       let thumb = try? await VideoRecorder.shared.generateThumbnail(for: url) {
+                        await MainActor.run {
+                            self.thumbnail = thumb
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                self.thumbnailVisible = true
+                            }
+                        }
+                    }
+                }
+            } else if hasVideo && showAllThumbnails {
+                // Thumbnail already loaded, just fade in
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    self.thumbnailVisible = true
+                }
+            } else if hasVideo && !showAllThumbnails {
+                // If toggle is OFF, set thumbnailVisible instantly (no animation)
+                self.thumbnailVisible = false
+            }
+        }
+        .onChange(of: showAllThumbnails) { oldValue, newValue in
+            if newValue && hasVideo {
+                // Always set thumbnailVisible to true with animation
+                withAnimation(.easeInOut(duration: 0.4).delay(0.1)) {
+                    self.thumbnailVisible = true
+                }
+                // Load thumbnail if not already loaded
+                if thumbnail == nil {
+                    Task {
+                        if let url = VideoRecorder.shared.getVideoURL(for: date),
+                           let thumb = try? await VideoRecorder.shared.generateThumbnail(for: url) {
+                            await MainActor.run {
+                                self.thumbnail = thumb
+                                // Animation already triggered above
+                            }
+                        }
+                    }
+                }
+            } else if !newValue && hasVideo {
+                // Fade out when toggle is turned OFF
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    self.thumbnailVisible = false
+                }
+                // Clear thumbnail after fade-out
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    if !self.showAllThumbnails {
+                        self.thumbnail = nil
+                        self.cleanupDayCellResources()
+                    }
+                }
+            }
+        }
     }
 
     private func cleanupDayCellResources() {
+        // Cancel any pending timers
         livePreviewTimer?.invalidate()
         livePreviewTimer = nil
-        showLivePreview = false
-        player?.pause()
-        player = nil
-        playerStatusCancellable?.cancel()
-        playerStatusCancellable = nil
-        if let endObserver = endObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-            self.endObserver = nil
+        
+        // First, fade out the live preview smoothly
+        if showLivePreview {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                showLivePreview = false
+                hideThumbnail = false
+            }
+            
+            // Delay the player cleanup until after the fade animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.player?.pause()
+                self.player?.replaceCurrentItem(with: nil)
+                self.player = nil
+                
+                // Cancel observations
+                self.playerStatusCancellable?.cancel()
+                self.playerStatusCancellable = nil
+                if let endObserver = self.endObserver {
+                    NotificationCenter.default.removeObserver(endObserver)
+                    self.endObserver = nil
+                }
+                
+                // Reset states
+                self.playerReady = false
+            }
+        } else {
+            // If no live preview is showing, cleanup immediately
+            player?.pause()
+            player?.replaceCurrentItem(with: nil)
+            player = nil
+            
+            playerStatusCancellable?.cancel()
+            playerStatusCancellable = nil
+            if let endObserver = endObserver {
+                NotificationCenter.default.removeObserver(endObserver)
+                self.endObserver = nil
+            }
+            
+            hideThumbnail = false
+            playerReady = false
         }
-        // Optionally clear thumbnail if you want to free memory aggressively:
-        // thumbnail = nil
-        hideThumbnail = false
-        playerReady = false
+        
+        // ALWAYS reset thumbnail visibility if toggle is off
+        if !showAllThumbnails {
+            thumbnailVisible = false
+        }
     }
 
     // Color helpers (if not already present)
