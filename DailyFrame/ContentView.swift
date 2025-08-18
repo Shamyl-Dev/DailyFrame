@@ -40,20 +40,6 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.top, showingRecordingView ? -40 : 10)
                         .animation(.easeInOut(duration: 0.3), value: showingRecordingView)
-                        
-                        // Delete button
-                        Button("Delete All Diary Entries") {
-                            let request = FetchDescriptor<DiaryEntry>()
-                            if let entries = try? modelContext.fetch(request) {
-                                for entry in entries {
-                                    modelContext.delete(entry)
-                                }
-                                try? modelContext.save()
-                                print("All diary entries deleted.")
-                            }
-                        }
-                        .padding()
-                        .foregroundColor(.red)
                     }
                 }
                 .frame(minWidth: 700, maxWidth: .infinity, minHeight: 750, maxHeight: .infinity)
@@ -139,35 +125,6 @@ struct ContentView: View {
                 Text("Your daily learning journey")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            }
-            
-            // Right-aligned button
-            HStack {
-                Spacer()
-                
-                Button(action: {
-                    // ✅ Use singleton instance
-                    sharedVideoRecorder.showVideosInFinder()
-                }) {
-                    HStack(spacing: 4) {
-                        Text("Videos")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(.quaternary.opacity(0.5), lineWidth: 0.5)
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("Open videos folder")
             }
         }
         .padding(.top, 8)
